@@ -67,7 +67,6 @@ impl Scanner {
             }
             '<' => {
                 if self.switch('=') {
-                    self.current += 1;
                     self.add_token(TokenKind::LessEqual)
                 } else {
                     self.add_token(TokenKind::Less)
@@ -75,7 +74,6 @@ impl Scanner {
             }
             '>' => {
                 if self.switch('=') {
-                    self.current += 1;
                     self.add_token(TokenKind::GreaterEqual)
                 } else {
                     self.add_token(TokenKind::Greater)
