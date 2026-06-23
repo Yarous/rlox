@@ -20,6 +20,19 @@ impl Scanner {
         }
     }
 
+    fn add_token(&mut self, token_kind: TokenKind) {
+        self.tokens.push(Token::new(
+            token_kind,
+            self.source
+                .chars()
+                .skip(self.start)
+                .take(self.current - self.start)
+                .collect(),
+            self.start,
+            self.line,
+        ));
+    }
+
     fn is_at_end(&self) -> bool {
         self.current >= self.source.len()
     }
@@ -85,23 +98,12 @@ impl Scanner {
         }
     }
 
-    fn add_token(&mut self, token_kind: TokenKind) {
-        self.tokens.push(Token::new(
-            token_kind,
-            self.source
-                .chars()
-                .skip(self.start)
-                .take(self.current - self.start)
-                .collect(),
-            self.start,
-            self.line,
-        ));
-    }
-
-    pub fn scan_tokens(&mut self) {
+    pub fn scan_tokens(&mut self, lox: &mut Lox) {
         while !self.is_at_end() {
             self.start = self.current;
-            self.scan_tokens()
+            self.scan_token(lox)
         }
+
+        self.tokens.push(Token::new(TokenKind::EOF, "".into(), 0, self.line));
     }
 }
