@@ -24,6 +24,7 @@ impl Scanner {
         self.current >= self.source.len()
     }
 
+    #[inline]
     fn switch(&mut self, expected: char) -> bool {
         if self.is_at_end() {
             false
@@ -51,23 +52,21 @@ impl Scanner {
             ';' => self.add_token(TokenKind::Semicolon),
             '*' => self.add_token(TokenKind::Star),
             '!' => {
-                if self.source.chars().nth(self.current + 1).unwrap() == '=' {
-                    self.current += 1;
+                if self.switch('=') {
                     self.add_token(TokenKind::BangEqual)
                 } else {
                     self.add_token(TokenKind::Bang)
                 }
             }
             '=' => {
-                if self.source.chars().nth(self.current + 1).unwrap() == '=' {
-                    self.current += 1;
+                if self.switch('=') {
                     self.add_token(TokenKind::EqualEqual)
                 } else {
                     self.add_token(TokenKind::Equal)
                 }
             }
             '<' => {
-                if self.source.chars().nth(self.current + 1).unwrap() == '=' {
+                if self.switch('=') {
                     self.current += 1;
                     self.add_token(TokenKind::LessEqual)
                 } else {
@@ -75,7 +74,7 @@ impl Scanner {
                 }
             }
             '>' => {
-                if self.source.chars().nth(self.current + 1).unwrap() == '=' {
+                if self.switch('=') {
                     self.current += 1;
                     self.add_token(TokenKind::GreaterEqual)
                 } else {
