@@ -1,7 +1,7 @@
 use crate::Lox;
-use crate::token::{Token, TokenKind};
+use crate::token::{Literal, Token, TokenKind, get_keywords_map};
 
-struct Scanner {
+pub(crate) struct Scanner {
     source: String,
     tokens: Vec<Token>,
     start: usize,
@@ -10,7 +10,7 @@ struct Scanner {
 }
 
 impl Scanner {
-    pub fn new(source: String) -> Scanner {
+    pub(crate) fn new(source: String) -> Scanner {
         Self {
             source,
             tokens: Vec::new(),
@@ -21,14 +21,14 @@ impl Scanner {
     }
 
     fn add_token(&mut self, token_kind: TokenKind) {
+        self.add_token_with_literal(token_kind, None)
+    }
+
+    fn add_token_with_literal(&mut self, token_kind: TokenKind, literal: Option<Literal>) {
         self.tokens.push(Token::new(
             token_kind,
-            self.source
-                .chars()
-                .skip(self.start)
-                .take(self.current - self.start)
-                .collect(),
-            self.start,
+            self.source[self.start..self.current].to_string(),
+            literal,
             self.line,
         ));
     }
@@ -40,18 +40,90 @@ impl Scanner {
     #[inline]
     fn switch(&mut self, expected: char) -> bool {
         if self.is_at_end() {
-            false
+            return false;
+        };
+        if self.source.chars().nth(self.current).unwrap() != expected {
+            return false;
+        };
+        self.advance();
+        true
+    }
+
+    fn advance(&mut self) -> char {
+        self.current += 1;
+        self.source.chars().nth(self.current - 1).unwrap()
+    }
+
+    fn peek(&self) -> char {
+        if self.is_at_end() {
+            return '\0';
+        };
+        self.source.chars().nth(self.current).unwrap()
+    }
+
+    fn peek_next(&self) -> char {
+        if self.current + 1 >= self.source.len() {
+            '\0'
         } else {
-            if self.source.chars().nth(self.current + 1).unwrap() != expected {
-                return false;
-            };
-            self.current += 1;
-            true
+            self.source.chars().nth(self.current + 1).unwrap()
         }
     }
 
+    #[inline]
+    fn string(&mut self, lox: &mut Lox) {
+        while self.peek() != '"' && !self.is_at_end() {
+            if self.peek() == '\n' {
+                self.line += 1;
+            }
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            lox.report_error(self.line, "Unterminated string.");
+            return;
+        }
+
+        self.advance();
+        let string = self.source[self.start + 1..self.current].to_string();
+        let string = Literal::String(string);
+        self.add_token_with_literal(TokenKind::String, Some(string));
+    }
+    #[inline]
+    fn number(&mut self) {
+        while self.peek().is_ascii_digit() {
+            self.advance();
+        }
+
+        if self.peek() == '.' && self.peek_next().is_ascii_digit() {
+            self.advance();
+            while self.peek().is_ascii_digit() {
+                self.advance();
+            }
+        }
+
+        let number = self.source[self.start..self.current].to_string();
+        let number = Literal::Number(number.parse::<f64>().unwrap());
+        self.add_token_with_literal(TokenKind::Number, Some(number));
+    }
+
+    fn identifier(&mut self) {
+        let map = get_keywords_map().read().unwrap();
+
+        while self.peek().is_alphanumeric() {
+            self.advance();
+        }
+
+        let text = &self.source[self.start..self.current];
+        let token_kind = match map.get(&text) {
+            Some(kind) => *kind,
+            None => TokenKind::Identifier,
+        };
+
+        self.add_token(token_kind);
+    }
+
     fn scan_token(&mut self, lox: &mut Lox) {
-        let c: char = self.source.chars().nth(self.current).unwrap();
+        let c = self.advance();
 
         match c {
             '(' => self.add_token(TokenKind::LeftParen),
@@ -92,18 +164,46 @@ impl Scanner {
                     self.add_token(TokenKind::Greater)
                 }
             }
-            _ => {
-                lox.report_error(self.line, "Failed to parse lexeme as token");
+            '/' => {
+                if self.switch('/') {
+                    while self.peek() != '\n' && !self.is_at_end() {
+                        // TODO: we can just set the pointer on the end of the line
+                        self.advance();
+                    }
+                } else if self.switch('*') {
+                    while self.peek() != '*' && !self.is_at_end() {
+                        self.advance();
+                    }
+                } else {
+                    self.add_token(TokenKind::Slash)
+                }
+            }
+            '"' => self.string(lox),
+            '0'..='9' => self.number(),
+            ' ' => (),
+            '\t' => (),
+            '\r' => (),
+            '\n' => {
+                self.line += 1;
+            }
+            c => {
+                if c.is_alphabetic() {
+                    self.identifier();
+                } else {
+                    lox.report_error(self.line, "Failed to parse lexeme as token");
+                }
             }
         }
     }
 
-    pub fn scan_tokens(&mut self, lox: &mut Lox) {
+    pub fn scan_tokens(&mut self, lox: &mut Lox) -> &Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
-            self.scan_token(lox)
+            self.scan_token(lox);
         }
 
-        self.tokens.push(Token::new(TokenKind::EOF, "".into(), 0, self.line));
+        self.tokens
+            .push(Token::new(TokenKind::EOF, "".into(), None, self.line));
+        &self.tokens
     }
 }
