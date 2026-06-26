@@ -5,6 +5,9 @@ use std::io::{BufReader, Read, Write};
 
 pub mod scanner;
 pub mod token;
+mod expr;
+mod ast;
+
 #[derive(Debug, Parser)]
 struct Args {
     source_path: Option<String>,
