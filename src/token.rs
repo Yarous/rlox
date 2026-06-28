@@ -30,7 +30,7 @@ pub(crate) fn get_keywords_map() -> &'static RwLock<HashMap<&'static str, TokenK
     })
 }
 
-#[derive(Display, Debug, Clone, Copy)]
+#[derive(Display, Debug, Clone, Copy, PartialEq)]
 pub(crate) enum TokenKind {
     // Single-Character tokens
     LeftParen,  // (
@@ -80,18 +80,21 @@ pub(crate) enum TokenKind {
     EOF,
 }
 
-#[derive(Debug, Display)]
+#[derive(Debug, Display, Clone)]
 pub(crate) enum Literal {
     Number(f64),
     String(String),
+    Nil,
+    True,
+    False,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Token {
-    token_type: TokenKind,
+    pub(crate) token_type: TokenKind,
     pub(crate) lexeme: String,
-    literal: Option<Literal>,
-    line: usize,
+    pub(crate) literal: Option<Literal>,
+    pub(crate) line: usize,
 }
 
 impl Token {

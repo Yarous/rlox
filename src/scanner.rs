@@ -1,22 +1,24 @@
 use crate::Lox;
 use crate::token::{Literal, Token, TokenKind, get_keywords_map};
 
-pub(crate) struct Scanner {
+pub(crate) struct Scanner<'a> {
     source: String,
     tokens: Vec<Token>,
     start: usize,
     current: usize,
     line: usize,
+    lox: &'a mut Lox,
 }
 
-impl Scanner {
-    pub(crate) fn new(source: String) -> Scanner {
+impl<'a> Scanner<'a> {
+    pub(crate) fn new(source: String, lox: &'a mut Lox) -> Self {
         Self {
             source,
             tokens: Vec::new(),
             start: 0,
             current: 0,
             line: 1,
+            lox,
         }
     }
 
@@ -70,7 +72,7 @@ impl Scanner {
     }
 
     #[inline]
-    fn string(&mut self, lox: &mut Lox) {
+    fn string(&mut self) {
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\n' {
                 self.line += 1;
@@ -79,7 +81,7 @@ impl Scanner {
         }
 
         if self.is_at_end() {
-            lox.report_error(self.line, "Unterminated string.");
+            self.lox.report_error(self.line, "", "Unterminated string.");
             return;
         }
 
@@ -122,7 +124,7 @@ impl Scanner {
         self.add_token(token_kind);
     }
 
-    fn scan_token(&mut self, lox: &mut Lox) {
+    fn scan_token(&mut self) {
         let c = self.advance();
 
         match c {
@@ -178,7 +180,7 @@ impl Scanner {
                     self.add_token(TokenKind::Slash)
                 }
             }
-            '"' => self.string(lox),
+            '"' => self.string(),
             '0'..='9' => self.number(),
             ' ' => (),
             '\t' => (),
@@ -190,16 +192,17 @@ impl Scanner {
                 if c.is_alphabetic() {
                     self.identifier();
                 } else {
-                    lox.report_error(self.line, "Failed to parse lexeme as token");
+                    self.lox
+                        .report_error(self.line, "", "Failed to parse lexeme as token");
                 }
             }
         }
     }
 
-    pub fn scan_tokens(&mut self, lox: &mut Lox) -> &Vec<Token> {
+    pub fn scan_tokens(&mut self) -> &Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
-            self.scan_token(lox);
+            self.scan_token();
         }
 
         self.tokens

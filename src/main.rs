@@ -1,12 +1,14 @@
 use crate::scanner::Scanner;
+use crate::token::{Token, TokenKind};
 use clap::Parser;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 
+mod ast;
+mod expr;
+mod parser;
 pub mod scanner;
 pub mod token;
-mod expr;
-mod ast;
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -22,9 +24,21 @@ impl Lox {
         Lox { had_error: false }
     }
 
-    pub(crate) fn report_error(&mut self, line: usize, message: &str) {
+    pub(crate) fn report_error(&mut self, line: usize, where_err: &str, message: &str) {
         self.had_error = true;
-        eprintln!("[line {}] Error: {}", line, message);
+        eprintln!("[line {}] Error {}: {}", line, where_err, message);
+    }
+
+    pub(crate) fn error(&mut self, token: Token, message: &str) {
+        if token.token_type == TokenKind::EOF {
+            self.report_error(token.line, "at end", message)
+        } else {
+            self.report_error(
+                token.line,
+                format!("at '{}'", token.lexeme).as_str(),
+                message,
+            )
+        }
     }
 
     fn run_prompt(&mut self) {
@@ -49,9 +63,11 @@ impl Lox {
     }
 
     fn run(&mut self, source: String) {
-        let mut scanner = Scanner::new(source);
-        let tokens = scanner.scan_tokens(self);
-        println!("{:?}", tokens);
+        let mut scanner = Scanner::new(source, self);
+        let tokens = scanner.scan_tokens();
+        let mut parser = parser::Parser::new(tokens.clone(), self);
+        let expr = parser.parse();
+        println!("{}", expr);
     }
 }
 
