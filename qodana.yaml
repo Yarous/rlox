@@ -11,7 +11,7 @@ version: "1.0"
 
 #Specify inspection profile for code analysis
 profile:
-  name: qodana.starter
+  name: qodana.recommended
 
 #Enable inspections
 #include:
@@ -43,4 +43,4 @@ profile:
 #    total: 50
 
 #Specify Qodana linter for analysis (Applied in CI/CD pipeline)
-linter: jetbrains/qodana-<linter>:2026.1
+linter: jetbrains/qodana-rust:2026.1

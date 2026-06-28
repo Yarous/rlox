@@ -8,9 +8,12 @@ pub(crate) struct Parser<'a> {
     lox: &'a mut Lox,
 }
 
+#[derive(Debug)]
 enum ParseError {
     SomeErr(String),
 }
+
+type Result = std::result::Result<Expr, ParseError>;
 
 impl<'a> Parser<'a> {
     pub(crate) fn new(tokens: Vec<Token>, lox: &'a mut Lox) -> Self {
@@ -22,7 +25,7 @@ impl<'a> Parser<'a> {
     }
 
     pub(crate) fn parse(&mut self) -> Expr {
-        self.expression()
+        self.expression().unwrap() // TODO: in the next chapter I will remove this unwrap, trust me =)
     }
 
     fn previous(&self) -> Token {
@@ -61,14 +64,17 @@ impl<'a> Parser<'a> {
         false
     }
 
-    fn consume(&mut self, token_kind: TokenKind, error_message: &str) -> Token {
+    fn consume(
+        &mut self,
+        token_kind: TokenKind,
+        error_message: &str,
+    ) -> std::result::Result<Token, ParseError> {
         if self.check(token_kind) {
-            return self.advance();
+            return Ok(self.advance());
         }
-
-        let ParseError::SomeErr(err_message) = self.error(self.peek(), error_message);
-        panic!("{}", err_message);
+        Err(self.error(self.peek(), error_message))
     }
+
     fn error(&mut self, token: Token, error_message: &str) -> ParseError {
         self.lox.error(token, error_message);
         ParseError::SomeErr(error_message.to_string())
@@ -103,15 +109,15 @@ impl<'a> Parser<'a> {
 
     // grammar-rules
 
-    fn expression(&mut self) -> Expr {
+    fn expression(&mut self) -> Result {
         self.equality()
     }
 
-    fn equality(&mut self) -> Expr {
-        let mut expr = self.comparison();
+    fn equality(&mut self) -> Result {
+        let mut expr = self.comparison()?;
         while self.switch(&[TokenKind::BangEqual, TokenKind::EqualEqual]) {
             let operator = self.previous();
-            let right = Box::from(self.comparison());
+            let right = Box::from(self.comparison()?);
 
             expr = Expr::Binary {
                 left: Box::from(expr),
@@ -119,11 +125,11 @@ impl<'a> Parser<'a> {
                 right,
             };
         }
-        expr
+        Ok(expr)
     }
 
-    fn comparison(&mut self) -> Expr {
-        let mut expr = self.term();
+    fn comparison(&mut self) -> Result {
+        let mut expr = self.term()?;
 
         while self.switch(&[
             TokenKind::Greater,
@@ -132,7 +138,7 @@ impl<'a> Parser<'a> {
             TokenKind::LessEqual,
         ]) {
             let operator = self.previous();
-            let right = Box::from(self.term());
+            let right = Box::from(self.term()?);
 
             expr = Expr::Binary {
                 left: Box::from(expr),
@@ -140,15 +146,15 @@ impl<'a> Parser<'a> {
                 right,
             }
         }
-        expr
+        Ok(expr)
     }
 
-    fn term(&mut self) -> Expr {
-        let mut expr = self.factor();
+    fn term(&mut self) -> Result {
+        let mut expr = self.factor()?;
 
         while self.switch(&[TokenKind::Minus, TokenKind::Plus]) {
             let operator = self.previous();
-            let right = Box::from(self.factor());
+            let right = Box::from(self.factor()?);
 
             expr = Expr::Binary {
                 left: Box::from(expr),
@@ -157,15 +163,15 @@ impl<'a> Parser<'a> {
             }
         }
 
-        expr
+        Ok(expr)
     }
 
-    fn factor(&mut self) -> Expr {
-        let mut expr = self.unary();
+    fn factor(&mut self) -> Result {
+        let mut expr = self.unary()?;
 
         while self.switch(&[TokenKind::Slash, TokenKind::Star]) {
             let operator = self.previous();
-            let right = Box::from(self.unary());
+            let right = Box::from(self.unary()?);
 
             expr = Expr::Binary {
                 left: Box::from(expr),
@@ -174,43 +180,42 @@ impl<'a> Parser<'a> {
             }
         }
 
-        expr
+        Ok(expr)
     }
 
-    fn unary(&mut self) -> Expr {
+    fn unary(&mut self) -> Result {
         if self.switch(&[TokenKind::Bang, TokenKind::Minus]) {
             let operator = self.previous();
-            let right = Box::from(self.unary());
+            let right = Box::from(self.unary()?);
 
-            return Expr::Unary { operator, right };
+            return Ok(Expr::Unary { operator, right });
         }
 
         self.primary()
     }
 
-    fn primary(&mut self) -> Expr {
+    fn primary(&mut self) -> Result {
         if self.switch(&[TokenKind::False]) {
-            return Expr::Literal(Literal::False);
+            return Ok(Expr::Literal(Literal::False));
         }
         if self.switch(&[TokenKind::True]) {
-            return Expr::Literal(Literal::True);
+            return Ok(Expr::Literal(Literal::True));
         }
         if self.switch(&[TokenKind::Nil]) {
-            return Expr::Literal(Literal::Nil);
+            return Ok(Expr::Literal(Literal::Nil));
         }
 
         if self.switch(&[TokenKind::Number, TokenKind::String]) {
-            return Expr::Literal(self.previous().literal.unwrap()); // safety: if this blocks runs that means that previous token is 100% literal
+            return Ok(Expr::Literal(self.previous().literal.unwrap())); // safety: if this blocks runs that means that previous token is 100% literal
         }
 
         if self.switch(&[TokenKind::LeftParen]) {
-            let expr = self.expression();
+            let expr = self.expression()?;
 
-            self.consume(TokenKind::RightParen, "Expect ')' after expression");
-            Expr::Grouping(Box::from(expr))
+            self.consume(TokenKind::RightParen, "Expect ')' after expression")?;
+            Ok(Expr::Grouping(Box::from(expr)))
         } else {
-            let ParseError::SomeErr(err_message) = self.error(self.peek(), "Expect expression.");
-            panic!("{}", err_message);
+            Err(self.error(self.peek(), "Expect expression."))
         }
     }
 }
