@@ -41,9 +41,11 @@ pub(crate) enum TokenKind {
     Dot,        // .
     Minus,      // -
     Plus,       // +
-    Semicolon,  // "
+    Semicolon,  // ;
+    Colon,      // :
     Slash,      // /
     Star,       // *
+    Question,   // ?
 
     Bang,         // !
     BangEqual,    // !=

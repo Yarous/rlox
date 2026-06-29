@@ -110,17 +110,53 @@ impl<'a> Parser<'a> {
     // grammar-rules
 
     fn expression(&mut self) -> Result {
-        self.equality()
+        self.comma()
+    }
+
+    fn comma(&mut self) -> Result {
+        let mut expr = self.ternary()?;
+
+        while self.switch(&[TokenKind::Comma]) {
+            let operator = self.previous();
+            let right = Box::new(self.ternary()?);
+
+            expr = Expr::Binary {
+                left: Box::new(expr),
+                operator,
+                right,
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn ternary(&mut self) -> Result {
+        let mut expr = self.equality()?;
+
+        if self.switch(&[TokenKind::Question]) {
+            let then_expr = Box::new(self.ternary()?);
+            self.consume(TokenKind::Colon, "Expected ':'.")?;
+            let else_expr = Box::new(self.ternary()?);
+
+            expr = Expr::Ternary {
+                condition: Box::new(expr),
+                then_expr,
+                else_expr,
+            }
+        }
+
+        Ok(expr)
     }
 
     fn equality(&mut self) -> Result {
         let mut expr = self.comparison()?;
+
         while self.switch(&[TokenKind::BangEqual, TokenKind::EqualEqual]) {
             let operator = self.previous();
-            let right = Box::from(self.comparison()?);
+            let right = Box::new(self.comparison()?);
 
             expr = Expr::Binary {
-                left: Box::from(expr),
+                left: Box::new(expr),
                 operator,
                 right,
             };
@@ -138,10 +174,10 @@ impl<'a> Parser<'a> {
             TokenKind::LessEqual,
         ]) {
             let operator = self.previous();
-            let right = Box::from(self.term()?);
+            let right = Box::new(self.term()?);
 
             expr = Expr::Binary {
-                left: Box::from(expr),
+                left: Box::new(expr),
                 operator,
                 right,
             }
@@ -154,10 +190,10 @@ impl<'a> Parser<'a> {
 
         while self.switch(&[TokenKind::Minus, TokenKind::Plus]) {
             let operator = self.previous();
-            let right = Box::from(self.factor()?);
+            let right = Box::new(self.factor()?);
 
             expr = Expr::Binary {
-                left: Box::from(expr),
+                left: Box::new(expr),
                 operator,
                 right,
             }
@@ -171,10 +207,10 @@ impl<'a> Parser<'a> {
 
         while self.switch(&[TokenKind::Slash, TokenKind::Star]) {
             let operator = self.previous();
-            let right = Box::from(self.unary()?);
+            let right = Box::new(self.unary()?);
 
             expr = Expr::Binary {
-                left: Box::from(expr),
+                left: Box::new(expr),
                 operator,
                 right,
             }
@@ -186,7 +222,7 @@ impl<'a> Parser<'a> {
     fn unary(&mut self) -> Result {
         if self.switch(&[TokenKind::Bang, TokenKind::Minus]) {
             let operator = self.previous();
-            let right = Box::from(self.unary()?);
+            let right = Box::new(self.unary()?);
 
             return Ok(Expr::Unary { operator, right });
         }
@@ -195,6 +231,35 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> Result {
+        if self.switch(&[
+            TokenKind::Star,
+            TokenKind::Slash,
+            TokenKind::Plus,
+            TokenKind::Minus,
+            TokenKind::EqualEqual,
+            TokenKind::BangEqual,
+            TokenKind::Less,
+            TokenKind::LessEqual,
+            TokenKind::Greater,
+            TokenKind::GreaterEqual,
+            TokenKind::Comma,
+        ]) {
+            let operator = self.previous();
+            self.error(operator.clone(), "Missing left operand");
+
+            return match operator.token_type {
+                TokenKind::Slash | TokenKind::Star => self.factor(),
+                TokenKind::Plus | TokenKind::Minus => self.term(),
+                TokenKind::Greater
+                | TokenKind::GreaterEqual
+                | TokenKind::Less
+                | TokenKind::LessEqual => self.comparison(),
+                TokenKind::EqualEqual | TokenKind::BangEqual => self.equality(),
+                TokenKind::Comma => self.comma(),
+                _ => self.equality(),
+            };
+        }
+
         if self.switch(&[TokenKind::False]) {
             return Ok(Expr::Literal(Literal::False));
         }
@@ -213,7 +278,7 @@ impl<'a> Parser<'a> {
             let expr = self.expression()?;
 
             self.consume(TokenKind::RightParen, "Expect ')' after expression")?;
-            Ok(Expr::Grouping(Box::from(expr)))
+            Ok(Expr::Grouping(Box::new(expr)))
         } else {
             Err(self.error(self.peek(), "Expect expression."))
         }

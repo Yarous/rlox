@@ -136,7 +136,9 @@ impl<'a> Scanner<'a> {
             '.' => self.add_token(TokenKind::Dot),
             '-' => self.add_token(TokenKind::Minus),
             '+' => self.add_token(TokenKind::Plus),
+            '?' => self.add_token(TokenKind::Question),
             ';' => self.add_token(TokenKind::Semicolon),
+            ':' => self.add_token(TokenKind::Colon),
             '*' => self.add_token(TokenKind::Star),
             '!' => {
                 if self.switch('=') {
