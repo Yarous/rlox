@@ -86,7 +86,7 @@ impl<'a> Scanner<'a> {
         }
 
         self.advance();
-        let string = self.source[self.start + 1..self.current].to_string();
+        let string = self.source[self.start + 1..self.current - 1].to_string();
         let string = Literal::String(string);
         self.add_token_with_literal(TokenKind::String, Some(string));
     }

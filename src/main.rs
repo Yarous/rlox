@@ -1,3 +1,4 @@
+use crate::interpreter::{Interpreter, RuntimeError};
 use crate::scanner::Scanner;
 use crate::token::{Token, TokenKind};
 use clap::Parser;
@@ -6,6 +7,7 @@ use std::io::{BufReader, Read, Write};
 
 mod ast;
 mod expr;
+mod interpreter;
 mod parser;
 pub mod scanner;
 pub mod token;
@@ -17,11 +19,15 @@ struct Args {
 
 struct Lox {
     had_error: bool,
+    had_runtime_error: bool,
 }
 
 impl Lox {
     fn new() -> Self {
-        Lox { had_error: false }
+        Lox {
+            had_error: false,
+            had_runtime_error: false,
+        }
     }
 
     pub(crate) fn report_error(&mut self, line: usize, where_err: &str, message: &str) {
@@ -39,6 +45,15 @@ impl Lox {
                 message,
             )
         }
+    }
+
+    pub(crate) fn runtime_error(&mut self, error: RuntimeError) {
+        eprintln!(
+            "[line {}] Runtime error: {}",
+            error.token.line, error.error_type
+        );
+
+        self.had_error = true;
     }
 
     fn run_prompt(&mut self) {
@@ -67,7 +82,8 @@ impl Lox {
         let tokens = scanner.scan_tokens();
         let mut parser = parser::Parser::new(tokens.clone(), self);
         let expr = parser.parse();
-        println!("{}", expr);
+        let mut interpreter = Interpreter::new(self);
+        interpreter.interpret(expr);
     }
 }
 
@@ -81,5 +97,8 @@ fn main() {
     }
     if lox.had_error {
         std::process::exit(65);
+    }
+    if lox.had_runtime_error {
+        std::process::exit(70);
     }
 }

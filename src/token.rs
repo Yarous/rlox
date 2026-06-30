@@ -82,7 +82,7 @@ pub(crate) enum TokenKind {
     EOF,
 }
 
-#[derive(Debug, Display, Clone)]
+#[derive(Debug, Display, Clone, PartialEq)]
 pub(crate) enum Literal {
     Number(f64),
     String(String),
