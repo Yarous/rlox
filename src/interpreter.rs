@@ -1,13 +1,13 @@
+use crate::Lox;
 use crate::expr::{Expr, Op};
 use crate::token::{Literal, TokenKind};
-use crate::Lox;
 use std::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub(crate) enum ValidationError {
     DivisionByZero,
     InvalidOperandTypes {
-        expected: Vec<ValueType>,
+        expected: &'static [ValueType],
         actual_left: Option<Value>,
         actual_right: Value,
     },
@@ -15,7 +15,7 @@ pub(crate) enum ValidationError {
 
 impl Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let begin = "Runtime/Validation Error: ";
+        let begin = "Validation Error: ";
         match self {
             ValidationError::DivisionByZero => write!(f, "{}Division by Zero", begin),
             ValidationError::InvalidOperandTypes {
@@ -23,19 +23,22 @@ impl Display for ValidationError {
                 actual_left,
                 actual_right,
             } => {
-                let expected_str: Vec<String> = expected.iter().map(|v| v.to_string()).collect();
-                let expected_joined = expected_str.join(" or ");
+                let expected_str = expected
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" or ");
                 if let Some(actual_left) = actual_left {
                     write!(
                         f,
                         "{} Invalid operand types. Expected: [{}], but got: [{}] and [{}]",
-                        begin, expected_joined, actual_left, actual_right
+                        begin, expected_str, actual_left, actual_right
                     )
                 } else {
                     write!(
                         f,
                         "{} Invalid operand types. Expected: [{}], but got: [{}]",
-                        begin, expected_joined, actual_right
+                        begin, expected_str, actual_right
                     )
                 }
             }
@@ -92,8 +95,7 @@ impl From<Literal> for Value {
         match literal {
             Literal::Number(number) => Value::Number(number),
             Literal::String(string) => Value::String(string),
-            Literal::True => Value::Boolean(true),
-            Literal::False => Value::Boolean(false),
+            Literal::Boolean(value) => Value::Boolean(value),
             Literal::Nil => Value::Nil,
         }
     }
@@ -130,7 +132,7 @@ impl<'a> Interpreter<'a> {
                             Err(RuntimeError {
                                 line: operator.line,
                                 error_type: ValidationError::InvalidOperandTypes {
-                                    expected: vec![ValueType::Number],
+                                    expected: &[ValueType::Number],
                                     actual_left: None,
                                     actual_right: right_val,
                                 },
@@ -155,7 +157,7 @@ impl<'a> Interpreter<'a> {
                             Value::Number(l - r)
                         })
                     }
-                    TokenKind::Plus => match (left.clone(), right.clone()) {
+                    TokenKind::Plus => match (left, right) {
                         (Value::Number(left), Value::Number(right)) => {
                             Ok(Value::Number(left + right))
                         }
@@ -168,10 +170,10 @@ impl<'a> Interpreter<'a> {
                         (left, Value::String(right)) => {
                             Ok(Value::String(format!("{}{}", left, right)))
                         }
-                        _ => Err(RuntimeError {
+                        (left, right) => Err(RuntimeError {
                             line: operator.line,
                             error_type: ValidationError::InvalidOperandTypes {
-                                expected: vec![ValueType::Number, ValueType::String],
+                                expected: &[ValueType::Number, ValueType::String],
                                 actual_left: Some(left),
                                 actual_right: right,
                             },
@@ -182,10 +184,8 @@ impl<'a> Interpreter<'a> {
                             Value::Number(l * r)
                         })
                     }
-                    TokenKind::Slash => {
-                        if let (Value::Number(left), Value::Number(right)) =
-                            (left.clone(), right.clone())
-                        {
+                    TokenKind::Slash => match (left, right) {
+                        (Value::Number(left), Value::Number(right)) => {
                             if right != 0_f64 {
                                 Ok(Value::Number(left / right))
                             } else {
@@ -194,17 +194,16 @@ impl<'a> Interpreter<'a> {
                                     error_type: ValidationError::DivisionByZero,
                                 })
                             }
-                        } else {
-                            Err(RuntimeError {
-                                line: operator.line,
-                                error_type: ValidationError::InvalidOperandTypes {
-                                    expected: vec![ValueType::Number],
-                                    actual_left: Some(left),
-                                    actual_right: right,
-                                },
-                            })
                         }
-                    }
+                        (left, right) => Err(RuntimeError {
+                            line: operator.line,
+                            error_type: ValidationError::InvalidOperandTypes {
+                                expected: &[ValueType::Number],
+                                actual_left: Some(left),
+                                actual_right: right,
+                            },
+                        }),
+                    },
                     TokenKind::Greater => {
                         self.check_number_operands(operator, &left, &right, |l, r| {
                             Value::Boolean(l > r)
@@ -270,7 +269,7 @@ impl<'a> Interpreter<'a> {
             Err(RuntimeError {
                 line: operator.line,
                 error_type: ValidationError::InvalidOperandTypes {
-                    expected: vec![ValueType::Number],
+                    expected: &[ValueType::Number],
                     actual_left: Some(left.clone()),
                     actual_right: right.clone(),
                 },

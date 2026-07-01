@@ -47,10 +47,7 @@ impl Lox {
     }
 
     pub(crate) fn runtime_error(&mut self, error: RuntimeError) {
-        eprintln!(
-            "[line {}] Runtime error: {}",
-            error.line, error.error_type
-        );
+        eprintln!("[line {}] Runtime error: {}", error.line, error.error_type);
 
         self.had_runtime_error = true;
     }
@@ -81,10 +78,20 @@ impl Lox {
     fn run(&mut self, source: String) {
         let mut scanner = Scanner::new(&source, self);
         let tokens = scanner.scan_tokens();
-        let mut parser = parser::Parser::new(&tokens, self);
-        let expr = parser.parse();
+        if self.had_error {
+            return;
+        }
+        let mut parser = parser::Parser::new(&tokens);
+        let parse_result = parser.parse();
+        if !parse_result.errors.is_empty() {
+            for error in parse_result.errors {
+                self.error(error.token, error.message);
+            }
+            self.had_error = true;
+            return;
+        }
         let mut interpreter = Interpreter::new(self);
-        interpreter.interpret(expr.unwrap());
+        interpreter.interpret(parse_result.expr.unwrap());
     }
 }
 

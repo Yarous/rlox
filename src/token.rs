@@ -57,9 +57,8 @@ pub(crate) enum TokenKind {
 pub(crate) enum Literal {
     Number(f64),
     String(String),
+    Boolean(bool),
     Nil,
-    True,
-    False,
 }
 
 #[derive(Debug, Clone)]

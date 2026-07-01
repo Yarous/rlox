@@ -1,5 +1,5 @@
-use crate::token::{Literal, Token, TokenKind};
 use crate::Lox;
+use crate::token::{Literal, Token, TokenKind};
 
 pub(crate) struct Scanner<'src, 'lox> {
     source: &'src str,
@@ -16,7 +16,7 @@ impl<'src, 'lox> Scanner<'src, 'lox> {
         Self {
             source,
             bytes: source.as_bytes(),
-            tokens: Vec::new(),
+            tokens: Vec::with_capacity(source.len() / 4 + 8),
             start: 0,
             current: 0,
             line: 1,
@@ -126,9 +126,10 @@ impl<'src, 'lox> Scanner<'src, 'lox> {
             }
         }
 
-        let number = self.source[self.start..self.current].to_string();
-        let number = Literal::Number(number.parse::<f64>().unwrap());
-        self.add_token_with_literal(TokenKind::Number, Some(number));
+        let number = self.source[self.start..self.current]
+            .parse::<f64>()
+            .expect("Scanner only accepts valid Lox number syntax");
+        self.add_token_with_literal(TokenKind::Number, Some(Literal::Number(number)));
     }
 
     fn identifier(&mut self) {
@@ -140,6 +141,21 @@ impl<'src, 'lox> Scanner<'src, 'lox> {
         let token_kind = self.keyword_kind(text);
 
         self.add_token(token_kind);
+    }
+
+    fn block_comment(&mut self) {
+        while !self.is_at_end() {
+            match self.advance() {
+                b'\n' => self.line += 1,
+                b'*' if self.peek() == b'/' => {
+                    self.advance();
+                    return;
+                }
+                _ => ()
+            }
+        }
+
+        self.lox.report_error(self.line, "", "Unterminated block comment.");
     }
 
     fn scan_token(&mut self) {
@@ -187,11 +203,8 @@ impl<'src, 'lox> Scanner<'src, 'lox> {
                 }
             }
             b'/' => {
-                if self.match_bytes(b'/') {
-                    while self.peek() != b'\n' && !self.is_at_end() {
-                        // TODO: we can just set the pointer on the end of the line
-                        self.advance();
-                    }
+                if self.match_bytes(b'*') {
+                    self.block_comment()
                 } else if self.match_bytes(b'*') {
                     while self.peek() != b'*' && !self.is_at_end() {
                         self.advance();
@@ -210,7 +223,6 @@ impl<'src, 'lox> Scanner<'src, 'lox> {
             }
             c => {
                 if self.is_alphabetical(c as char) {
-                    dbg!(c as char);
                     self.identifier();
                 } else {
                     self.lox
