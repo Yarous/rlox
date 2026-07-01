@@ -1,22 +1,36 @@
 use crate::Lox;
-use crate::expr::Expr;
+use crate::expr::{Expr, Op};
 use crate::token::{Literal, Token, TokenKind};
 
-pub(crate) struct Parser<'a> {
-    tokens: Vec<Token>,
+pub(crate) struct Parser<'tokens, 'lox> {
+    tokens: &'tokens [Token],
     current: usize,
-    lox: &'a mut Lox,
+    lox: &'lox mut Lox,
 }
 
 #[derive(Debug)]
-enum ParseError {
-    SomeErr(String),
+struct ParseError {
+    token_type: TokenKind,
+    lexeme: String,
+    line: usize,
+    message: &'static str,
+}
+
+impl ParseError {
+    fn new(token: &Token, error_message: &'static str) -> Self {
+        Self {
+            token_type: token.token_type,
+            lexeme: token.lexeme.clone(),
+            line: token.line,
+            message: error_message,
+        }
+    }
 }
 
 type Result = std::result::Result<Expr, ParseError>;
 
-impl<'a> Parser<'a> {
-    pub(crate) fn new(tokens: Vec<Token>, lox: &'a mut Lox) -> Self {
+impl<'tokens, 'lox> Parser<'tokens, 'lox> {
+    pub(crate) fn new(tokens: &'tokens [Token], lox: &'lox mut Lox) -> Self {
         Parser {
             tokens,
             current: 0,
@@ -24,27 +38,33 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub(crate) fn parse(&mut self) -> Expr {
-        self.expression().unwrap() // TODO: in the next chapter I will remove this unwrap, trust me =)
+    pub(crate) fn parse(&mut self) -> Option<Expr> {
+        match self.expression() {
+            Ok(expr) => Some(expr),
+            Err(_) => {
+                self.synchronize();
+                None
+            }
+        }
     }
 
-    fn previous(&self) -> Token {
-        self.tokens[self.current - 1].clone()
+    fn previous(&self) -> &Token {
+        &self.tokens[self.current - 1]
     }
 
-    fn advance(&mut self) -> Token {
+    fn advance(&mut self) -> &Token {
         if !self.is_at_end() {
             self.current += 1;
         }
         self.previous()
     }
 
-    fn peek(&self) -> Token {
-        self.tokens[self.current].clone()
+    fn peek(&self) -> &Token {
+        &self.tokens[self.current]
     }
 
     fn is_at_end(&self) -> bool {
-        self.peek().token_type == TokenKind::EOF
+        self.peek().token_type == TokenKind::Eof
     }
 
     fn check(&self, token_type: TokenKind) -> bool {
@@ -67,17 +87,17 @@ impl<'a> Parser<'a> {
     fn consume(
         &mut self,
         token_kind: TokenKind,
-        error_message: &str,
-    ) -> std::result::Result<Token, ParseError> {
+        error_message: &'static str,
+    ) -> std::result::Result<&Token, ParseError> {
         if self.check(token_kind) {
             return Ok(self.advance());
         }
-        Err(self.error(self.peek(), error_message))
+        Err(self.error(error_message))
     }
 
-    fn error(&mut self, token: Token, error_message: &str) -> ParseError {
-        self.lox.error(token, error_message);
-        ParseError::SomeErr(error_message.to_string())
+    fn error(&self, error_message: &'static str) -> ParseError {
+        let token = self.peek();
+        ParseError::new(token, error_message)
     }
 
     #[allow(unused)]
@@ -117,7 +137,7 @@ impl<'a> Parser<'a> {
         let mut expr = self.ternary()?;
 
         while self.switch(&[TokenKind::Comma]) {
-            let operator = self.previous();
+            let operator = Op::from(self.previous());
             let right = Box::new(self.ternary()?);
 
             expr = Expr::Binary {
@@ -152,7 +172,7 @@ impl<'a> Parser<'a> {
         let mut expr = self.comparison()?;
 
         while self.switch(&[TokenKind::BangEqual, TokenKind::EqualEqual]) {
-            let operator = self.previous();
+            let operator = Op::from(self.previous());
             let right = Box::new(self.comparison()?);
 
             expr = Expr::Binary {
@@ -173,7 +193,7 @@ impl<'a> Parser<'a> {
             TokenKind::Less,
             TokenKind::LessEqual,
         ]) {
-            let operator = self.previous();
+            let operator = Op::from(self.previous());
             let right = Box::new(self.term()?);
 
             expr = Expr::Binary {
@@ -189,7 +209,7 @@ impl<'a> Parser<'a> {
         let mut expr = self.factor()?;
 
         while self.switch(&[TokenKind::Minus, TokenKind::Plus]) {
-            let operator = self.previous();
+            let operator = Op::from(self.previous());
             let right = Box::new(self.factor()?);
 
             expr = Expr::Binary {
@@ -206,7 +226,7 @@ impl<'a> Parser<'a> {
         let mut expr = self.unary()?;
 
         while self.switch(&[TokenKind::Slash, TokenKind::Star]) {
-            let operator = self.previous();
+            let operator = Op::from(self.previous());
             let right = Box::new(self.unary()?);
 
             expr = Expr::Binary {
@@ -221,7 +241,7 @@ impl<'a> Parser<'a> {
 
     fn unary(&mut self) -> Result {
         if self.switch(&[TokenKind::Bang, TokenKind::Minus]) {
-            let operator = self.previous();
+            let operator = Op::from(self.previous());
             let right = Box::new(self.unary()?);
 
             return Ok(Expr::Unary { operator, right });
@@ -245,7 +265,7 @@ impl<'a> Parser<'a> {
             TokenKind::Comma,
         ]) {
             let operator = self.previous();
-            self.error(operator.clone(), "Missing left operand");
+            self.error("Missing left operand");
 
             return match operator.token_type {
                 TokenKind::Slash | TokenKind::Star => self.factor(),
@@ -271,7 +291,7 @@ impl<'a> Parser<'a> {
         }
 
         if self.switch(&[TokenKind::Number, TokenKind::String]) {
-            return Ok(Expr::Literal(self.previous().literal.unwrap())); // safety: if this blocks runs that means that previous token is 100% literal
+            return Ok(Expr::Literal(self.previous().literal.clone().unwrap())); // safety: if this blocks runs that means that previous token is 100% literal
         }
 
         if self.switch(&[TokenKind::LeftParen]) {
@@ -280,7 +300,7 @@ impl<'a> Parser<'a> {
             self.consume(TokenKind::RightParen, "Expect ')' after expression")?;
             Ok(Expr::Grouping(Box::new(expr)))
         } else {
-            Err(self.error(self.peek(), "Expect expression."))
+            Err(self.error("Expect expression."))
         }
     }
 }

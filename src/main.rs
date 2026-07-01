@@ -5,7 +5,6 @@ use clap::Parser;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 
-mod ast;
 mod expr;
 mod interpreter;
 mod parser;
@@ -35,8 +34,8 @@ impl Lox {
         eprintln!("[line {}] Error {}: {}", line, where_err, message);
     }
 
-    pub(crate) fn error(&mut self, token: Token, message: &str) {
-        if token.token_type == TokenKind::EOF {
+    pub(crate) fn error(&mut self, token: &Token, message: &str) {
+        if token.token_type == TokenKind::Eof {
             self.report_error(token.line, "at end", message)
         } else {
             self.report_error(
@@ -50,10 +49,10 @@ impl Lox {
     pub(crate) fn runtime_error(&mut self, error: RuntimeError) {
         eprintln!(
             "[line {}] Runtime error: {}",
-            error.token.line, error.error_type
+            error.line, error.error_type
         );
 
-        self.had_error = true;
+        self.had_runtime_error = true;
     }
 
     fn run_prompt(&mut self) {
@@ -66,6 +65,8 @@ impl Lox {
                 break;
             }
             self.run(line);
+            self.had_error = false;
+            self.had_runtime_error = false;
         }
     }
 
@@ -78,12 +79,12 @@ impl Lox {
     }
 
     fn run(&mut self, source: String) {
-        let mut scanner = Scanner::new(source, self);
+        let mut scanner = Scanner::new(&source, self);
         let tokens = scanner.scan_tokens();
-        let mut parser = parser::Parser::new(tokens.clone(), self);
+        let mut parser = parser::Parser::new(&tokens, self);
         let expr = parser.parse();
         let mut interpreter = Interpreter::new(self);
-        interpreter.interpret(expr);
+        interpreter.interpret(expr.unwrap());
     }
 }
 
@@ -95,10 +96,10 @@ fn main() {
     } else {
         lox.run_prompt();
     }
-    if lox.had_error {
-        std::process::exit(65);
-    }
     if lox.had_runtime_error {
         std::process::exit(70);
+    }
+    if lox.had_error {
+        std::process::exit(65);
     }
 }

@@ -1,6 +1,6 @@
+use crate::expr::{Expr, Op};
+use crate::token::{Literal, TokenKind};
 use crate::Lox;
-use crate::expr::Expr;
-use crate::token::{Literal, Token, TokenKind};
 use std::fmt::Display;
 
 #[derive(Debug, Clone)]
@@ -17,7 +17,7 @@ impl Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let begin = "Runtime/Validation Error: ";
         match self {
-            ValidationError::DivisionByZero => write!(f, "{}{}", begin, "Division by Zero"),
+            ValidationError::DivisionByZero => write!(f, "{}Division by Zero", begin),
             ValidationError::InvalidOperandTypes {
                 expected,
                 actual_left,
@@ -45,7 +45,7 @@ impl Display for ValidationError {
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeError {
-    pub(crate) token: Token,
+    pub(crate) line: usize,
     pub(crate) error_type: ValidationError,
 }
 
@@ -128,7 +128,7 @@ impl<'a> Interpreter<'a> {
                             Ok(Value::Number(-number))
                         } else {
                             Err(RuntimeError {
-                                token: operator.clone(),
+                                line: operator.line,
                                 error_type: ValidationError::InvalidOperandTypes {
                                     expected: vec![ValueType::Number],
                                     actual_left: None,
@@ -169,7 +169,7 @@ impl<'a> Interpreter<'a> {
                             Ok(Value::String(format!("{}{}", left, right)))
                         }
                         _ => Err(RuntimeError {
-                            token: operator.clone(),
+                            line: operator.line,
                             error_type: ValidationError::InvalidOperandTypes {
                                 expected: vec![ValueType::Number, ValueType::String],
                                 actual_left: Some(left),
@@ -190,13 +190,13 @@ impl<'a> Interpreter<'a> {
                                 Ok(Value::Number(left / right))
                             } else {
                                 Err(RuntimeError {
-                                    token: operator.clone(),
+                                    line: operator.line,
                                     error_type: ValidationError::DivisionByZero,
                                 })
                             }
                         } else {
                             Err(RuntimeError {
-                                token: operator.clone(),
+                                line: operator.line,
                                 error_type: ValidationError::InvalidOperandTypes {
                                     expected: vec![ValueType::Number],
                                     actual_left: Some(left),
@@ -238,9 +238,9 @@ impl<'a> Interpreter<'a> {
                 let condition = self.evaluate(condition)?;
 
                 if self.truthy(&condition) {
-                    self.evaluate(&then_expr)
+                    self.evaluate(then_expr)
                 } else {
-                    self.evaluate(&else_expr)
+                    self.evaluate(else_expr)
                 }
             }
         }
@@ -256,7 +256,7 @@ impl<'a> Interpreter<'a> {
 
     fn check_number_operands<T>(
         &self,
-        operator: &Token,
+        operator: &Op,
         left: &Value,
         right: &Value,
         operation: T,
@@ -268,7 +268,7 @@ impl<'a> Interpreter<'a> {
             Ok(operation(*left, *right))
         } else {
             Err(RuntimeError {
-                token: operator.clone(),
+                line: operator.line,
                 error_type: ValidationError::InvalidOperandTypes {
                     expected: vec![ValueType::Number],
                     actual_left: Some(left.clone()),

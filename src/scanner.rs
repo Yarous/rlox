@@ -1,19 +1,21 @@
+use crate::token::{Literal, Token, TokenKind};
 use crate::Lox;
-use crate::token::{Literal, Token, TokenKind, get_keywords_map};
 
-pub(crate) struct Scanner<'a> {
-    source: String,
+pub(crate) struct Scanner<'src, 'lox> {
+    source: &'src str,
+    bytes: &'src [u8],
     tokens: Vec<Token>,
     start: usize,
     current: usize,
     line: usize,
-    lox: &'a mut Lox,
+    lox: &'lox mut Lox,
 }
 
-impl<'a> Scanner<'a> {
-    pub(crate) fn new(source: String, lox: &'a mut Lox) -> Self {
+impl<'src, 'lox> Scanner<'src, 'lox> {
+    pub(crate) fn new(source: &'src str, lox: &'lox mut Lox) -> Self {
         Self {
             source,
+            bytes: source.as_bytes(),
             tokens: Vec::new(),
             start: 0,
             current: 0,
@@ -35,46 +37,67 @@ impl<'a> Scanner<'a> {
         ));
     }
 
+    fn keyword_kind(&self, text: &str) -> TokenKind {
+        match text {
+            "and" => TokenKind::And,
+            "class" => TokenKind::Class,
+            "else" => TokenKind::Else,
+            "false" => TokenKind::False,
+            "for" => TokenKind::For,
+            "fun" => TokenKind::Fun,
+            "if" => TokenKind::If,
+            "nil" => TokenKind::Nil,
+            "or" => TokenKind::Or,
+            "print" => TokenKind::Print,
+            "return" => TokenKind::Return,
+            "super" => TokenKind::Super,
+            "this" => TokenKind::This,
+            "true" => TokenKind::True,
+            "var" => TokenKind::Var,
+            "while" => TokenKind::While,
+            _ => TokenKind::Identifier,
+        }
+    }
+
     fn is_at_end(&self) -> bool {
-        self.current >= self.source.len()
+        self.current >= self.bytes.len()
+    }
+
+    fn is_alphabetical(&self, c: char) -> bool {
+        matches!(c, 'a'..='z' | 'A'..='Z' | '_')
+    }
+
+    fn is_alphanumerical(&self, c: char) -> bool {
+        matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_')
     }
 
     #[inline]
-    fn switch(&mut self, expected: char) -> bool {
-        if self.is_at_end() {
+    fn match_bytes(&mut self, expected: u8) -> bool {
+        if self.peek() != expected {
             return false;
-        };
-        if self.source.chars().nth(self.current).unwrap() != expected {
-            return false;
-        };
-        self.advance();
+        }
+        self.current += 1;
         true
     }
 
-    fn advance(&mut self) -> char {
+    fn advance(&mut self) -> u8 {
+        let byte = self.bytes[self.current];
         self.current += 1;
-        self.source.chars().nth(self.current - 1).unwrap()
+        byte
     }
 
-    fn peek(&self) -> char {
-        if self.is_at_end() {
-            return '\0';
-        };
-        self.source.chars().nth(self.current).unwrap()
+    fn peek(&self) -> u8 {
+        self.bytes.get(self.current).copied().unwrap_or(b'\0')
     }
 
-    fn peek_next(&self) -> char {
-        if self.current + 1 >= self.source.len() {
-            '\0'
-        } else {
-            self.source.chars().nth(self.current + 1).unwrap()
-        }
+    fn peek_next(&self) -> u8 {
+        self.bytes.get(self.current + 1).copied().unwrap_or(b'\0')
     }
 
     #[inline]
     fn string(&mut self) {
-        while self.peek() != '"' && !self.is_at_end() {
-            if self.peek() == '\n' {
+        while self.peek() != b'"' && !self.is_at_end() {
+            if self.peek() == b'\n' {
                 self.line += 1;
             }
             self.advance();
@@ -96,7 +119,7 @@ impl<'a> Scanner<'a> {
             self.advance();
         }
 
-        if self.peek() == '.' && self.peek_next().is_ascii_digit() {
+        if self.peek() == b'.' && self.peek_next().is_ascii_digit() {
             self.advance();
             while self.peek().is_ascii_digit() {
                 self.advance();
@@ -109,17 +132,12 @@ impl<'a> Scanner<'a> {
     }
 
     fn identifier(&mut self) {
-        let map = get_keywords_map().read().unwrap();
-
-        while self.peek().is_alphanumeric() {
+        while self.is_alphanumerical(self.peek() as char) {
             self.advance();
         }
 
         let text = &self.source[self.start..self.current];
-        let token_kind = match map.get(&text) {
-            Some(kind) => *kind,
-            None => TokenKind::Identifier,
-        };
+        let token_kind = self.keyword_kind(text);
 
         self.add_token(token_kind);
     }
@@ -128,70 +146,71 @@ impl<'a> Scanner<'a> {
         let c = self.advance();
 
         match c {
-            '(' => self.add_token(TokenKind::LeftParen),
-            ')' => self.add_token(TokenKind::RightParen),
-            '{' => self.add_token(TokenKind::LeftBrace),
-            '}' => self.add_token(TokenKind::RightBrace),
-            ',' => self.add_token(TokenKind::Comma),
-            '.' => self.add_token(TokenKind::Dot),
-            '-' => self.add_token(TokenKind::Minus),
-            '+' => self.add_token(TokenKind::Plus),
-            '?' => self.add_token(TokenKind::Question),
-            ';' => self.add_token(TokenKind::Semicolon),
-            ':' => self.add_token(TokenKind::Colon),
-            '*' => self.add_token(TokenKind::Star),
-            '!' => {
-                if self.switch('=') {
+            b'(' => self.add_token(TokenKind::LeftParen),
+            b')' => self.add_token(TokenKind::RightParen),
+            b'{' => self.add_token(TokenKind::LeftBrace),
+            b'}' => self.add_token(TokenKind::RightBrace),
+            b',' => self.add_token(TokenKind::Comma),
+            b'.' => self.add_token(TokenKind::Dot),
+            b'-' => self.add_token(TokenKind::Minus),
+            b'+' => self.add_token(TokenKind::Plus),
+            b'?' => self.add_token(TokenKind::Question),
+            b';' => self.add_token(TokenKind::Semicolon),
+            b':' => self.add_token(TokenKind::Colon),
+            b'*' => self.add_token(TokenKind::Star),
+            b'!' => {
+                if self.match_bytes(b'=') {
                     self.add_token(TokenKind::BangEqual)
                 } else {
                     self.add_token(TokenKind::Bang)
                 }
             }
-            '=' => {
-                if self.switch('=') {
+            b'=' => {
+                if self.match_bytes(b'=') {
                     self.add_token(TokenKind::EqualEqual)
                 } else {
                     self.add_token(TokenKind::Equal)
                 }
             }
-            '<' => {
-                if self.switch('=') {
+            b'<' => {
+                if self.match_bytes(b'=') {
                     self.add_token(TokenKind::LessEqual)
                 } else {
                     self.add_token(TokenKind::Less)
                 }
             }
-            '>' => {
-                if self.switch('=') {
+            b'>' => {
+                if self.match_bytes(b'=') {
                     self.add_token(TokenKind::GreaterEqual)
                 } else {
                     self.add_token(TokenKind::Greater)
                 }
             }
-            '/' => {
-                if self.switch('/') {
-                    while self.peek() != '\n' && !self.is_at_end() {
+            b'/' => {
+                if self.match_bytes(b'/') {
+                    while self.peek() != b'\n' && !self.is_at_end() {
                         // TODO: we can just set the pointer on the end of the line
                         self.advance();
                     }
-                } else if self.switch('*') {
-                    while self.peek() != '*' && !self.is_at_end() {
+                } else if self.match_bytes(b'*') {
+                    while self.peek() != b'*' && !self.is_at_end() {
                         self.advance();
                     }
                 } else {
                     self.add_token(TokenKind::Slash)
                 }
             }
-            '"' => self.string(),
-            '0'..='9' => self.number(),
-            ' ' => (),
-            '\t' => (),
-            '\r' => (),
-            '\n' => {
+            b'"' => self.string(),
+            b'0'..=b'9' => self.number(),
+            b' ' => (),
+            b'\t' => (),
+            b'\r' => (),
+            b'\n' => {
                 self.line += 1;
             }
             c => {
-                if c.is_alphabetic() {
+                if self.is_alphabetical(c as char) {
+                    dbg!(c as char);
                     self.identifier();
                 } else {
                     self.lox
@@ -201,14 +220,14 @@ impl<'a> Scanner<'a> {
         }
     }
 
-    pub fn scan_tokens(&mut self) -> &Vec<Token> {
+    pub fn scan_tokens(&mut self) -> Vec<Token> {
         while !self.is_at_end() {
             self.start = self.current;
             self.scan_token();
         }
 
         self.tokens
-            .push(Token::new(TokenKind::EOF, "".into(), None, self.line));
-        &self.tokens
+            .push(Token::new(TokenKind::Eof, "".into(), None, self.line));
+        std::mem::take(&mut self.tokens)
     }
 }

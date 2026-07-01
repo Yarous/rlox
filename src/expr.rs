@@ -1,9 +1,23 @@
-use crate::token::{Literal, Token};
+use crate::token::{Literal, Token, TokenKind};
+
+pub(crate) struct Op {
+    pub(crate) token_type: TokenKind,
+    pub(crate) line: usize,
+}
+
+impl From<&Token> for Op {
+    fn from(token: &Token) -> Self {
+        Self {
+            token_type: token.token_type,
+            line: token.line,
+        }
+    }
+}
 
 pub(crate) enum Expr {
     Binary {
         left: Box<Expr>,
-        operator: Token,
+        operator: Op,
         right: Box<Expr>,
     },
     Ternary {
@@ -12,7 +26,7 @@ pub(crate) enum Expr {
         else_expr: Box<Expr>,
     },
     Unary {
-        operator: Token,
+        operator: Op,
         right: Box<Expr>,
     },
     Literal(Literal),
@@ -26,13 +40,13 @@ impl std::fmt::Display for Expr {
                 left,
                 operator,
                 right,
-            } => write!(f, "({} {} {})", left, operator.lexeme, right),
+            } => write!(f, "({} {} {})", left, operator.token_type, right),
             Expr::Ternary {
                 condition,
                 then_expr,
                 else_expr,
             } => write!(f, "({} ? {} : {})", condition, then_expr, else_expr),
-            Expr::Unary { operator, right } => write!(f, "({} {})", operator.lexeme, right),
+            Expr::Unary { operator, right } => write!(f, "({} {})", operator.token_type, right),
             Expr::Literal(literal) => write!(f, "{}", literal),
             Expr::Grouping(expr) => write!(f, "({})", expr),
         }

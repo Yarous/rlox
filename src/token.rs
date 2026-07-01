@@ -1,34 +1,5 @@
-use std::collections::HashMap;
 use std::fmt::Display;
-use std::sync::{OnceLock, RwLock};
 use strum::Display;
-
-// TODO: we can use perfect hash functions instead
-pub(crate) static KEYWORDS: OnceLock<RwLock<HashMap<&'static str, TokenKind>>> = OnceLock::new();
-
-pub(crate) fn get_keywords_map() -> &'static RwLock<HashMap<&'static str, TokenKind>> {
-    KEYWORDS.get_or_init(|| {
-        let mut m = HashMap::new();
-        m.insert("and", TokenKind::And);
-        m.insert("or", TokenKind::Or);
-        m.insert("class", TokenKind::Class);
-        m.insert("else", TokenKind::Else);
-        m.insert("false", TokenKind::False);
-        m.insert("for", TokenKind::For);
-        m.insert("fun", TokenKind::Fun);
-        m.insert("if", TokenKind::If);
-        m.insert("nil", TokenKind::Nil);
-        m.insert("print", TokenKind::Print);
-        m.insert("return", TokenKind::Return);
-        m.insert("super", TokenKind::Super);
-        m.insert("this", TokenKind::This);
-        m.insert("true", TokenKind::True);
-        m.insert("var", TokenKind::Var);
-        m.insert("while", TokenKind::While);
-
-        RwLock::new(m)
-    })
-}
 
 #[derive(Display, Debug, Clone, Copy, PartialEq)]
 pub(crate) enum TokenKind {
@@ -79,7 +50,7 @@ pub(crate) enum TokenKind {
     Var,
     While,
 
-    EOF,
+    Eof,
 }
 
 #[derive(Debug, Display, Clone, PartialEq)]
