@@ -40,7 +40,7 @@ impl Environment {
     }
 
     pub(crate) fn assign(&mut self, name: &Token, value: Value) -> Result<Value, RuntimeError> {
-        if self.values.get(&name.lexeme).is_some() {
+        if self.values.contains_key(&name.lexeme) {
             self.values.insert(name.lexeme.clone(), value);
             return Ok(self.values.get(&name.lexeme).unwrap().clone()); // TODO: remove unwrap here =).
         }
