@@ -10,6 +10,8 @@ mod interpreter;
 mod parser;
 pub mod scanner;
 pub mod token;
+mod stmt;
+mod environment;
 
 #[derive(Debug, Parser)]
 struct Args {
@@ -61,7 +63,7 @@ impl Lox {
             if line == "\n" || line == "exit\n" {
                 break;
             }
-            self.run(line);
+            self.run(&line);
             self.had_error = false;
             self.had_runtime_error = false;
         }
@@ -72,26 +74,29 @@ impl Lox {
         let mut reader = BufReader::new(file);
         let mut contents = String::new();
         reader.read_to_string(&mut contents).unwrap();
-        self.run(contents);
+        self.run(&contents);
     }
 
-    fn run(&mut self, source: String) {
-        let mut scanner = Scanner::new(&source, self);
-        let tokens = scanner.scan_tokens();
-        if self.had_error {
+    fn run(&mut self, source: &str) {
+        let mut scanner = Scanner::new(source);
+        let scan_result = scanner.scan_tokens();
+        if !scan_result.errors.is_empty() {
+            for error in scan_result.errors {
+                self.report_error(error.line, "", error.message);
+            }
             return;
         }
+        let tokens = scan_result.tokens;
         let mut parser = parser::Parser::new(&tokens);
         let parse_result = parser.parse();
         if !parse_result.errors.is_empty() {
             for error in parse_result.errors {
                 self.error(error.token, error.message);
             }
-            self.had_error = true;
             return;
         }
         let mut interpreter = Interpreter::new(self);
-        interpreter.interpret(parse_result.expr.unwrap());
+        interpreter.interpret(&parse_result.statements.unwrap());
     }
 }
 

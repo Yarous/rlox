@@ -1,6 +1,8 @@
 use crate::Lox;
+use crate::environment::Environment;
 use crate::expr::{Expr, Op};
-use crate::token::{Literal, TokenKind};
+use crate::stmt::Stmt;
+use crate::token::{Literal, Token, TokenKind};
 use std::fmt::Display;
 
 #[derive(Debug, Clone)]
@@ -11,6 +13,7 @@ pub(crate) enum ValidationError {
         actual_left: Option<Value>,
         actual_right: Value,
     },
+    UndefinedVariable(String),
 }
 
 impl Display for ValidationError {
@@ -41,6 +44,9 @@ impl Display for ValidationError {
                         begin, expected_str, actual_right
                     )
                 }
+            }
+            ValidationError::UndefinedVariable(where_undef) => {
+                write!(f, "{} Undefined variable: {}", begin, where_undef)
             }
         }
     }
@@ -101,23 +107,105 @@ impl From<Literal> for Value {
     }
 }
 
-pub(crate) struct Interpreter<'a> {
-    lox: &'a mut Lox,
+pub(crate) struct Interpreter<'lox> {
+    lox: &'lox mut Lox,
+    environment: Environment,
 }
 
-impl<'a> Interpreter<'a> {
-    pub(crate) fn new(lox: &'a mut Lox) -> Self {
-        Self { lox }
-    }
-
-    pub(crate) fn interpret(&mut self, expression: Expr) {
-        match self.evaluate(&expression) {
-            Ok(value) => println!("{}", value),
-            Err(error) => self.lox.runtime_error(error),
+impl<'lox> Interpreter<'lox> {
+    pub(crate) fn new(lox: &'lox mut Lox) -> Self {
+        Self {
+            lox,
+            environment: Environment::new(),
         }
     }
 
-    fn evaluate(&self, expr: &Expr) -> Result<Value, RuntimeError> {
+    pub(crate) fn interpret(&mut self, statements: &[Stmt]) {
+        for stmt in statements {
+            match self.execute(stmt) {
+                Ok(_) => (),
+                Err(error) => self.lox.runtime_error(error),
+            }
+        }
+    }
+
+    fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+        match stmt {
+            Stmt::ExprStmt(_) => self.evaluate_expression_statement(stmt),
+            Stmt::PrintStmt(_) => self.evaluate_print_statement(stmt),
+            Stmt::Var { name, initializer } => self.evaluate_var_statement(name, initializer),
+            Stmt::Block(stmts) => {
+                self.evaluate_block_statement(stmts.clone(), self.environment.clone())
+            }
+        }
+    }
+
+    fn evaluate_block_statement(
+        &mut self,
+        statements: Vec<Stmt>,
+        environment: Environment,
+    ) -> Result<(), RuntimeError> {
+        let previous = self.environment.clone();
+        self.environment = environment;
+
+        for stmt in statements {
+            match self.execute(&stmt) {
+                Ok(_) => {}
+                Err(err) => {
+                    self.environment = previous;
+                    return Err(err);
+                }
+            };
+        }
+        self.environment = previous;
+        Ok(())
+    }
+
+    fn evaluate_var_statement(
+        &mut self,
+        name: &Token,
+        initializer: &Option<Expr>,
+    ) -> Result<(), RuntimeError> {
+        let value = match initializer {
+            Some(expr) => self.evaluate(expr)?,
+            None => Value::Nil,
+        };
+
+        self.environment.define(name, value);
+        Ok(())
+    }
+
+    fn evaluate_assign_expression(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
+        if let Expr::Assignment { name, value } = expr {
+            let value = self.evaluate(value)?;
+            self.environment.assign(name, value)
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn evaluate_expression_statement(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+        match stmt {
+            Stmt::ExprStmt(expr) => {
+                self.evaluate(expr)?;
+                Ok(())
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn evaluate_print_statement(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+        match stmt {
+            Stmt::PrintStmt(expr) => {
+                let value = self.evaluate(expr)?;
+                println!("{}", value);
+                Ok(())
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn evaluate(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
         match expr {
             Expr::Literal(literal) => Ok(Value::from(literal.clone())),
             Expr::Grouping(expr) => self.evaluate(expr),
@@ -242,6 +330,8 @@ impl<'a> Interpreter<'a> {
                     self.evaluate(else_expr)
                 }
             }
+            Expr::Variable(name) => self.environment.get(name),
+            Expr::Assignment { .. } => self.evaluate_assign_expression(expr),
         }
     }
 

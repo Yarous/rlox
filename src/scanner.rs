@@ -1,18 +1,38 @@
-use crate::Lox;
 use crate::token::{Literal, Token, TokenKind};
 
-pub(crate) struct Scanner<'src, 'lox> {
+pub(crate) struct Scanner<'src> {
     source: &'src str,
     bytes: &'src [u8],
     tokens: Vec<Token>,
     start: usize,
     current: usize,
     line: usize,
-    lox: &'lox mut Lox,
 }
 
-impl<'src, 'lox> Scanner<'src, 'lox> {
-    pub(crate) fn new(source: &'src str, lox: &'lox mut Lox) -> Self {
+pub(crate) struct ScanError {
+    pub(crate) message: &'static str,
+    pub(crate) line: usize,
+}
+
+pub(crate) struct ScanResult {
+    pub(crate) tokens: Vec<Token>,
+    pub(crate) errors: Vec<ScanError>,
+}
+
+impl ScanResult {
+    fn new(tokens: Vec<Token>, errors: Vec<ScanError>) -> Self {
+        Self { tokens, errors }
+    }
+}
+
+impl ScanError {
+    fn new(message: &'static str, _problem_byte: u8, line: usize) -> Self {
+        Self { message, line }
+    }
+}
+
+impl<'src> Scanner<'src> {
+    pub(crate) fn new(source: &'src str) -> Self {
         Self {
             source,
             bytes: source.as_bytes(),
@@ -20,7 +40,6 @@ impl<'src, 'lox> Scanner<'src, 'lox> {
             start: 0,
             current: 0,
             line: 1,
-            lox,
         }
     }
 
@@ -71,6 +90,17 @@ impl<'src, 'lox> Scanner<'src, 'lox> {
         matches!(c, 'a'..='z' | 'A'..='Z' | '0'..='9' | '_')
     }
 
+    fn add_one_or_two_token(
+        &mut self,
+        expected: u8,
+        one: TokenKind,
+        two: TokenKind,
+    ) -> Result<(), ScanError> {
+        let kind = if self.match_bytes(expected) { two } else { one };
+        self.add_token(kind);
+        Ok(())
+    }
+
     #[inline]
     fn match_bytes(&mut self, expected: u8) -> bool {
         if self.peek() != expected {
@@ -90,12 +120,16 @@ impl<'src, 'lox> Scanner<'src, 'lox> {
         self.bytes.get(self.current).copied().unwrap_or(b'\0')
     }
 
+    fn peek_previous(&self) -> u8 {
+        self.bytes.get(self.current - 1).copied().unwrap_or(b'\0')
+    }
+
     fn peek_next(&self) -> u8 {
         self.bytes.get(self.current + 1).copied().unwrap_or(b'\0')
     }
 
     #[inline]
-    fn string(&mut self) {
+    fn string(&mut self) -> Result<(), ScanError> {
         while self.peek() != b'"' && !self.is_at_end() {
             if self.peek() == b'\n' {
                 self.line += 1;
@@ -104,17 +138,21 @@ impl<'src, 'lox> Scanner<'src, 'lox> {
         }
 
         if self.is_at_end() {
-            self.lox.report_error(self.line, "", "Unterminated string.");
-            return;
+            return Err(ScanError::new(
+                "Unterminated string",
+                self.peek(),
+                self.line,
+            ));
         }
 
         self.advance();
         let string = self.source[self.start + 1..self.current - 1].to_string();
         let string = Literal::String(string);
         self.add_token_with_literal(TokenKind::String, Some(string));
+        Ok(())
     }
     #[inline]
-    fn number(&mut self) {
+    fn number(&mut self) -> Result<(), ScanError> {
         while self.peek().is_ascii_digit() {
             self.advance();
         }
@@ -126,10 +164,18 @@ impl<'src, 'lox> Scanner<'src, 'lox> {
             }
         }
 
-        let number = self.source[self.start..self.current]
-            .parse::<f64>()
-            .expect("Scanner only accepts valid Lox number syntax");
+        let number = match self.source[self.start..self.current].parse::<f64>() {
+            Ok(num) => num,
+            Err(_) => {
+                return Err(ScanError::new(
+                    "Scanner only accepts valid Lox number syntax",
+                    self.peek(),
+                    self.line,
+                ));
+            }
+        };
         self.add_token_with_literal(TokenKind::Number, Some(Literal::Number(number)));
+        Ok(())
     }
 
     fn identifier(&mut self) {
@@ -143,103 +189,129 @@ impl<'src, 'lox> Scanner<'src, 'lox> {
         self.add_token(token_kind);
     }
 
-    fn block_comment(&mut self) {
+    fn block_comment(&mut self) -> Result<(), ScanError> {
         while !self.is_at_end() {
             match self.advance() {
                 b'\n' => self.line += 1,
                 b'*' if self.peek() == b'/' => {
                     self.advance();
-                    return;
+                    return Ok(());
                 }
-                _ => ()
+                _ => (),
             }
         }
-
-        self.lox.report_error(self.line, "", "Unterminated block comment.");
+        Err(ScanError::new(
+            "Unterminated block comment",
+            self.peek(),
+            self.line,
+        ))
     }
 
-    fn scan_token(&mut self) {
+    fn scan_token(&mut self) -> Result<(), ScanError> {
         let c = self.advance();
 
         match c {
-            b'(' => self.add_token(TokenKind::LeftParen),
-            b')' => self.add_token(TokenKind::RightParen),
-            b'{' => self.add_token(TokenKind::LeftBrace),
-            b'}' => self.add_token(TokenKind::RightBrace),
-            b',' => self.add_token(TokenKind::Comma),
-            b'.' => self.add_token(TokenKind::Dot),
-            b'-' => self.add_token(TokenKind::Minus),
-            b'+' => self.add_token(TokenKind::Plus),
-            b'?' => self.add_token(TokenKind::Question),
-            b';' => self.add_token(TokenKind::Semicolon),
-            b':' => self.add_token(TokenKind::Colon),
-            b'*' => self.add_token(TokenKind::Star),
-            b'!' => {
-                if self.match_bytes(b'=') {
-                    self.add_token(TokenKind::BangEqual)
-                } else {
-                    self.add_token(TokenKind::Bang)
-                }
+            b'(' => {
+                self.add_token(TokenKind::LeftParen);
+                Ok(())
             }
-            b'=' => {
-                if self.match_bytes(b'=') {
-                    self.add_token(TokenKind::EqualEqual)
-                } else {
-                    self.add_token(TokenKind::Equal)
-                }
+            b')' => {
+                self.add_token(TokenKind::RightParen);
+                Ok(())
             }
-            b'<' => {
-                if self.match_bytes(b'=') {
-                    self.add_token(TokenKind::LessEqual)
-                } else {
-                    self.add_token(TokenKind::Less)
-                }
+            b'{' => {
+                self.add_token(TokenKind::LeftBrace);
+                Ok(())
             }
-            b'>' => {
-                if self.match_bytes(b'=') {
-                    self.add_token(TokenKind::GreaterEqual)
-                } else {
-                    self.add_token(TokenKind::Greater)
-                }
+            b'}' => {
+                self.add_token(TokenKind::RightBrace);
+                Ok(())
             }
+            b',' => {
+                self.add_token(TokenKind::Comma);
+                Ok(())
+            }
+            b'.' => {
+                self.add_token(TokenKind::Dot);
+                Ok(())
+            }
+            b'-' => {
+                self.add_token(TokenKind::Minus);
+                Ok(())
+            }
+            b'+' => {
+                self.add_token(TokenKind::Plus);
+                Ok(())
+            }
+            b'?' => {
+                self.add_token(TokenKind::Question);
+                Ok(())
+            }
+            b';' => {
+                self.add_token(TokenKind::Semicolon);
+                Ok(())
+            }
+            b':' => {
+                self.add_token(TokenKind::Colon);
+                Ok(())
+            }
+            b'*' => {
+                self.add_token(TokenKind::Star);
+                Ok(())
+            }
+            b'!' => self.add_one_or_two_token(b'=', TokenKind::Bang, TokenKind::BangEqual),
+            b'=' => self.add_one_or_two_token(b'=', TokenKind::Equal, TokenKind::EqualEqual),
+            b'>' => self.add_one_or_two_token(b'=', TokenKind::Greater, TokenKind::GreaterEqual),
+            b'<' => self.add_one_or_two_token(b'=', TokenKind::Less, TokenKind::LessEqual),
             b'/' => {
                 if self.match_bytes(b'*') {
                     self.block_comment()
-                } else if self.match_bytes(b'*') {
-                    while self.peek() != b'*' && !self.is_at_end() {
+                } else if self.match_bytes(b'/') {
+                    while self.peek() != b'\n' && !self.is_at_end() {
                         self.advance();
                     }
+                    Ok(())
                 } else {
-                    self.add_token(TokenKind::Slash)
+                    self.add_token(TokenKind::Slash);
+                    Ok(())
                 }
             }
             b'"' => self.string(),
             b'0'..=b'9' => self.number(),
-            b' ' => (),
-            b'\t' => (),
-            b'\r' => (),
+            b' ' => Ok(()),
+            b'\t' => Ok(()),
+            b'\r' => Ok(()),
             b'\n' => {
                 self.line += 1;
+                Ok(())
             }
             c => {
                 if self.is_alphabetical(c as char) {
                     self.identifier();
+                    Ok(())
                 } else {
-                    self.lox
-                        .report_error(self.line, "", "Failed to parse lexeme as token");
+                    Err(ScanError::new(
+                        "Failed to parse lexeme as token",
+                        self.peek_previous(),
+                        self.line,
+                    ))
                 }
             }
         }
     }
 
-    pub fn scan_tokens(&mut self) -> Vec<Token> {
+    pub fn scan_tokens(&mut self) -> ScanResult {
+        let mut errors: Vec<ScanError> = Vec::new();
         while !self.is_at_end() {
             self.start = self.current;
-            self.scan_token();
+            match self.scan_token() {
+                Ok(_) => (),
+                Err(error) => errors.push(error),
+            }
         }
 
         self.tokens
             .push(Token::new(TokenKind::Eof, "".into(), None, self.line));
-        std::mem::take(&mut self.tokens)
+        ScanResult::new(std::mem::take(&mut self.tokens), errors)
     }
 }

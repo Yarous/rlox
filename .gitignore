@@ -1,4 +1,6 @@
 /target
-test.lox
 .idea
+.codex
+.agents
+test.lox
 review.md

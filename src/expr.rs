@@ -1,5 +1,7 @@
 use crate::token::{Literal, Token, TokenKind};
 
+
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Op {
     pub(crate) token_type: TokenKind,
     pub(crate) line: usize,
@@ -14,6 +16,7 @@ impl From<&Token> for Op {
     }
 }
 
+#[derive(Debug, Clone)]
 pub(crate) enum Expr {
     Binary {
         left: Box<Expr>,
@@ -31,6 +34,11 @@ pub(crate) enum Expr {
     },
     Literal(Literal),
     Grouping(Box<Expr>),
+    Variable(Token),
+    Assignment {
+        name: Token,
+        value: Box<Expr>,
+    }
 }
 
 impl std::fmt::Display for Expr {
@@ -49,6 +57,8 @@ impl std::fmt::Display for Expr {
             Expr::Unary { operator, right } => write!(f, "({} {})", operator.token_type, right),
             Expr::Literal(literal) => write!(f, "{}", literal),
             Expr::Grouping(expr) => write!(f, "({})", expr),
+            Expr::Variable(var) => write!(f, "{}", var),
+            Expr::Assignment { name, value } => write!(f, "{} = {}", name, value),
         }
     }
 }
