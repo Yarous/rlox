@@ -14,6 +14,7 @@ pub(crate) enum ValidationError {
         actual_right: Value,
     },
     UndefinedVariable(String),
+    UninitializedVariable(String),
 }
 
 impl Display for ValidationError {
@@ -47,6 +48,9 @@ impl Display for ValidationError {
             }
             ValidationError::UndefinedVariable(where_undef) => {
                 write!(f, "{} Undefined variable: {}", begin, where_undef)
+            }
+            ValidationError::UninitializedVariable(where_uninit) => {
+                write!(f, "{} Uninitialized variable: {}", begin, where_uninit)
             }
         }
     }
@@ -167,8 +171,8 @@ impl<'lox> Interpreter<'lox> {
         initializer: &Option<Expr>,
     ) -> Result<(), RuntimeError> {
         let value = match initializer {
-            Some(expr) => self.evaluate(expr)?,
-            None => Value::Nil,
+            Some(expr) => Some(self.evaluate(expr)?),
+            None => None,
         };
 
         self.environment.define(name, value);
@@ -177,7 +181,7 @@ impl<'lox> Interpreter<'lox> {
 
     fn evaluate_assign_expression(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
         if let Expr::Assignment { name, value } = expr {
-            let value = self.evaluate(value)?;
+            let value = Some(self.evaluate(value)?);
             self.environment.assign(name, value)
         } else {
             unreachable!()
