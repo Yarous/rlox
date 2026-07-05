@@ -1,9 +1,10 @@
-use crate::Lox;
-use crate::environment::Environment;
+use crate::environment::{EnvRef, Environment};
 use crate::expr::{Expr, Op};
 use crate::stmt::Stmt;
 use crate::token::{Literal, Token, TokenKind};
+use crate::Lox;
 use std::fmt::Display;
+use std::rc::Rc;
 
 #[derive(Debug, Clone)]
 pub(crate) enum ValidationError {
@@ -113,7 +114,7 @@ impl From<Literal> for Value {
 
 pub(crate) struct Interpreter<'lox> {
     lox: &'lox mut Lox,
-    environment: Environment,
+    environment: EnvRef,
 }
 
 impl<'lox> Interpreter<'lox> {
@@ -139,17 +140,18 @@ impl<'lox> Interpreter<'lox> {
             Stmt::PrintStmt(_) => self.evaluate_print_statement(stmt),
             Stmt::Var { name, initializer } => self.evaluate_var_statement(name, initializer),
             Stmt::Block(stmts) => {
-                self.evaluate_block_statement(stmts.clone(), self.environment.clone())
+                let block_env = Environment::add_enclosing(Rc::clone(&self.environment));
+                self.evaluate_block_statement(stmts, block_env)
             }
         }
     }
 
     fn evaluate_block_statement(
         &mut self,
-        statements: Vec<Stmt>,
-        environment: Environment,
+        statements: &[Stmt],
+        environment: EnvRef,
     ) -> Result<(), RuntimeError> {
-        let previous = self.environment.clone();
+        let previous = Rc::clone(&self.environment);
         self.environment = environment;
 
         for stmt in statements {
@@ -175,14 +177,14 @@ impl<'lox> Interpreter<'lox> {
             None => None,
         };
 
-        self.environment.define(name, value);
+        self.environment.borrow_mut().define(name, value);
         Ok(())
     }
 
     fn evaluate_assign_expression(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
         if let Expr::Assignment { name, value } = expr {
             let value = Some(self.evaluate(value)?);
-            self.environment.assign(name, value)
+            self.environment.borrow_mut().assign(name, value)
         } else {
             unreachable!()
         }
@@ -334,7 +336,7 @@ impl<'lox> Interpreter<'lox> {
                     self.evaluate(else_expr)
                 }
             }
-            Expr::Variable(name) => self.environment.get(name),
+            Expr::Variable(name) => self.environment.borrow().get(name),
             Expr::Assignment { .. } => self.evaluate_assign_expression(expr),
         }
     }
