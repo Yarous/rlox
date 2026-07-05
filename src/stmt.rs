@@ -9,5 +9,10 @@ pub(crate) enum Stmt {
         name: Token,
         initializer: Option<Expr>,
     },
-    Block(Vec<Stmt>)
+    Block(Vec<Stmt>),
+    IfStmt {
+        condition: Expr,
+        then_branch: Box<Stmt>,
+        else_branch: Option<Box<Stmt>>,
+    }
 }

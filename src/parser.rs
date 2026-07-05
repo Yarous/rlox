@@ -184,8 +184,28 @@ impl<'tokens> Parser<'tokens> {
             return self.print_statement();
         } else if self.switch(&[TokenKind::LeftBrace]) {
             return Ok(Stmt::Block(self.block()?));
+        } else if self.switch(&[TokenKind::If]) {
+            return self.if_statement()
         }
         self.expression_statement()
+    }
+
+    fn if_statement(&mut self) -> Result<Stmt, ParseError<'tokens>> {
+        self.consume(TokenKind::LeftParen, "Expect '(' after 'if'")?;
+        let condition = self.expression()?;
+        self.consume(TokenKind::RightParen, "Expect ')' after 'if'")?;
+
+        let then_branch = Box::new(self.statement()?);
+        let mut else_branch: Option<Box<Stmt>> = None;
+        if self.switch(&[TokenKind::Else]) {
+            else_branch = Some(Box::new(self.statement()?));
+        };
+
+        Ok(Stmt::IfStmt {
+            condition,
+            then_branch,
+            else_branch
+        })
     }
 
     fn print_statement(&mut self) -> Result<Stmt, ParseError<'tokens>> {

@@ -1,8 +1,8 @@
+use crate::Lox;
 use crate::environment::{EnvRef, Environment};
 use crate::expr::{Expr, Op};
 use crate::stmt::Stmt;
 use crate::token::{Literal, Token, TokenKind};
-use crate::Lox;
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -143,7 +143,27 @@ impl<'lox> Interpreter<'lox> {
                 let block_env = Environment::add_enclosing(Rc::clone(&self.environment));
                 self.evaluate_block_statement(stmts, block_env)
             }
+            Stmt::IfStmt { .. } => self.evaluate_if_statement(stmt),
         }
+    }
+
+    fn evaluate_if_statement(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+        if let Stmt::IfStmt {
+            condition,
+            then_branch,
+            else_branch,
+        } = stmt
+        {
+            let condition = self.evaluate(condition)?;
+
+            if self.truthy(&condition) {
+                self.execute(then_branch)?;
+            } else if let Some(else_branch) = else_branch {
+                self.execute(else_branch)?;
+            }
+            return Ok(());
+        }
+        unreachable!();
     }
 
     fn evaluate_block_statement(
