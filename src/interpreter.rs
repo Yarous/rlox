@@ -175,7 +175,7 @@ impl<'lox> Interpreter<'lox> {
         self.environment = environment;
 
         for stmt in statements {
-            match self.execute(&stmt) {
+            match self.execute(stmt) {
                 Ok(_) => {}
                 Err(err) => {
                     self.environment = previous;
