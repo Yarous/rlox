@@ -137,18 +137,56 @@ impl<'lox> Interpreter<'lox> {
     fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
         match stmt {
             Stmt::ExprStmt(_) => self.evaluate_expression_statement(stmt),
-            Stmt::PrintStmt(_) => self.evaluate_print_statement(stmt),
+            Stmt::Print(_) => self.evaluate_print_statement(stmt),
             Stmt::Var { name, initializer } => self.evaluate_var_statement(name, initializer),
             Stmt::Block(stmts) => {
                 let block_env = Environment::add_enclosing(Rc::clone(&self.environment));
                 self.evaluate_block_statement(stmts, block_env)
             }
-            Stmt::IfStmt { .. } => self.evaluate_if_statement(stmt),
+            Stmt::If { .. } => self.evaluate_if_statement(stmt),
+            Stmt::While { .. } => self.evaluate_while_statement(stmt),
         }
     }
 
+    fn evaluate_while_statement(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+        if let Stmt::While { condition, body } = stmt {
+            while {
+                let while_condition = self.evaluate(condition)?;
+                self.truthy(&while_condition)
+            } {
+                self.execute(body)?;
+            }
+            return Ok(());
+        }
+
+        unreachable!()
+    }
+
+    fn evaluate_logical_expression(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
+        if let Expr::Logical {
+            left,
+            operator,
+            right,
+        } = expr
+        {
+            let left = self.evaluate(left)?;
+            if operator.token_type == TokenKind::Or {
+                if self.truthy(&left) {
+                    return Ok(left);
+                }
+            } else {
+                if !self.truthy(&left) {
+                    return Ok(left);
+                }
+            }
+
+            return self.evaluate(right);
+        }
+        unreachable!();
+    }
+
     fn evaluate_if_statement(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
-        if let Stmt::IfStmt {
+        if let Stmt::If {
             condition,
             then_branch,
             else_branch,
@@ -222,7 +260,7 @@ impl<'lox> Interpreter<'lox> {
 
     fn evaluate_print_statement(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
         match stmt {
-            Stmt::PrintStmt(expr) => {
+            Stmt::Print(expr) => {
                 let value = self.evaluate(expr)?;
                 println!("{}", value);
                 Ok(())
@@ -343,6 +381,7 @@ impl<'lox> Interpreter<'lox> {
                     _ => unreachable!(),
                 }
             }
+            Expr::Logical { .. } => self.evaluate_logical_expression(expr),
             Expr::Ternary {
                 condition,
                 then_expr,

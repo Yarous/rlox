@@ -49,6 +49,7 @@ pub(crate) enum TokenKind {
     True,
     Var,
     While,
+    Break,
 
     Eof,
 }

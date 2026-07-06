@@ -5,13 +5,13 @@ use clap::Parser;
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
 
+mod environment;
 mod expr;
 mod interpreter;
 mod parser;
 pub mod scanner;
-pub mod token;
 mod stmt;
-mod environment;
+pub mod token;
 
 #[derive(Debug, Parser)]
 struct Args {

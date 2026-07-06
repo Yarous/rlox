@@ -58,6 +58,7 @@ impl<'src> Scanner<'src> {
 
     fn keyword_kind(&self, text: &str) -> TokenKind {
         match text {
+            "break" => TokenKind::Break,
             "and" => TokenKind::And,
             "class" => TokenKind::Class,
             "else" => TokenKind::Else,
