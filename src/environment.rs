@@ -1,4 +1,4 @@
-use crate::interpreter::{RuntimeError, ValidationError, Value};
+use crate::interpreter::{ControlFlow, RuntimeError, ValidationError, Value};
 use crate::token::Token;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -31,28 +31,28 @@ impl Environment {
         self.values.insert(name.lexeme.clone(), value);
     }
 
-    pub(crate) fn get(&self, name: &Token) -> Result<Value, RuntimeError> {
+    pub(crate) fn get(&self, name: &Token) -> Result<Value, ControlFlow> {
         if let Some(value) = self.values.get(&name.lexeme) {
-            return value.clone().ok_or(RuntimeError {
+            return value.clone().ok_or(ControlFlow::RuntimeError(RuntimeError {
                 line: name.line,
                 error_type: ValidationError::UninitializedVariable(name.lexeme.clone()),
-            });
+            }));
         }
 
         if let Some(enclosing) = &self.enclosing {
             return enclosing.borrow().get(name);
         }
-        Err(RuntimeError {
+        Err(ControlFlow::RuntimeError(RuntimeError {
             line: name.line,
             error_type: ValidationError::UndefinedVariable(name.lexeme.clone()),
-        })
+        }))
     }
 
     pub(crate) fn assign(
         &mut self,
         name: &Token,
         value: Option<Value>,
-    ) -> Result<Value, RuntimeError> {
+    ) -> Result<Value, ControlFlow> {
         if self.values.contains_key(&name.lexeme) {
             self.values.insert(name.lexeme.clone(), value);
             return Ok(self.values.get(&name.lexeme).unwrap().clone().unwrap()); // TODO: remove unwrap X2 here =).
@@ -62,9 +62,9 @@ impl Environment {
             return enclosing.borrow_mut().assign(name, value);
         }
 
-        Err(RuntimeError {
+        Err(ControlFlow::RuntimeError(RuntimeError {
             line: name.line,
             error_type: ValidationError::UndefinedVariable(name.lexeme.clone()),
-        })
+        }))
     }
 }

@@ -2,10 +2,12 @@ use crate::expr::{Expr, Op};
 use crate::stmt::Stmt;
 use crate::token::{Literal, Token, TokenKind};
 
+#[derive(Debug)]
 pub(crate) struct Parser<'tokens> {
     tokens: &'tokens [Token],
     current: usize,
     errors: Vec<ParseError<'tokens>>,
+    loop_depth: usize,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -34,6 +36,7 @@ impl<'tokens> Parser<'tokens> {
             tokens,
             current: 0,
             errors: vec![],
+            loop_depth: 0,
         }
     }
 
@@ -95,6 +98,7 @@ impl<'tokens> Parser<'tokens> {
         if self.check(token_kind) {
             return Ok(self.advance());
         }
+        dbg!(self.check(token_kind));
         Err(self.error(error_message))
     }
 
@@ -190,17 +194,19 @@ impl<'tokens> Parser<'tokens> {
             return self.while_statement();
         } else if self.switch(&[TokenKind::For]) {
             return self.for_statement();
+        } else if self.switch(&[TokenKind::Break]) {
+            return self.break_statement();
         }
-        // } else if self.switch(&[TokenKind::Break]) {
-        //     return self.break_statement();
-        // }
         self.expression_statement()
     }
 
-    // fn break_statement(&mut self) -> Result<Stmt, ParseError<'tokens>> {
-    //     self.consume(TokenKind::Semicolon, "Expect ';' after break.")?;
-    //     Ok(Stmt::Break)
-    // }
+    fn break_statement(&mut self) -> Result<Stmt, ParseError<'tokens>> {
+        if self.loop_depth == 0 {
+            return Err(self.error("Can't use 'break' outside of a loop."));
+        }
+        self.consume(TokenKind::Semicolon, "Expect ';' after break.")?;
+        Ok(Stmt::Break)
+    }
 
     fn for_statement(&mut self) -> Result<Stmt, ParseError<'tokens>> {
         self.consume(TokenKind::LeftParen, "Expect '(' after 'for'")?;
@@ -225,7 +231,10 @@ impl<'tokens> Parser<'tokens> {
         }
         self.consume(TokenKind::RightParen, "Expect ')' after loop condition.")?;
 
-        let mut body = self.statement()?;
+        self.loop_depth += 1;
+        let body = self.statement();
+        self.loop_depth -= 1;
+        let mut body = body?;
         if let Some(increment) = increment {
             body = Stmt::Block(vec![body, Stmt::ExprStmt(increment)]);
         }
@@ -248,7 +257,10 @@ impl<'tokens> Parser<'tokens> {
         let condition = self.expression()?;
         self.consume(TokenKind::RightParen, "Expect ')' after 'while'")?;
 
-        let body = self.statement()?;
+        self.loop_depth += 1;
+        let body = self.statement();
+        self.loop_depth -= 1;
+        let body = body?;
         Ok(Stmt::While {
             condition,
             body: Box::new(body),
@@ -362,7 +374,7 @@ impl<'tokens> Parser<'tokens> {
     }
 
     fn and(&mut self) -> Result<Expr, ParseError<'tokens>> {
-        let mut expr = self.comparison()?;
+        let mut expr = self.equality()?;
 
         while self.switch(&[TokenKind::And]) {
             let operator = Op::from(self.previous());

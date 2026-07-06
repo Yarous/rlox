@@ -63,6 +63,11 @@ pub(crate) struct RuntimeError {
     pub(crate) error_type: ValidationError,
 }
 
+pub(crate) enum ControlFlow {
+    RuntimeError(RuntimeError),
+    Break,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Value {
     Number(f64),
@@ -129,12 +134,16 @@ impl<'lox> Interpreter<'lox> {
         for stmt in statements {
             match self.execute(stmt) {
                 Ok(_) => (),
-                Err(error) => self.lox.runtime_error(error),
+                Err(error) => {
+                    if let ControlFlow::RuntimeError(reported_error) = error {
+                        self.lox.runtime_error(reported_error)
+                    }
+                }
             }
         }
     }
 
-    fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+    fn execute(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {
         match stmt {
             Stmt::ExprStmt(_) => self.evaluate_expression_statement(stmt),
             Stmt::Print(_) => self.evaluate_print_statement(stmt),
@@ -145,16 +154,23 @@ impl<'lox> Interpreter<'lox> {
             }
             Stmt::If { .. } => self.evaluate_if_statement(stmt),
             Stmt::While { .. } => self.evaluate_while_statement(stmt),
+            Stmt::Break => Err(ControlFlow::Break)
         }
     }
 
-    fn evaluate_while_statement(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+    fn evaluate_while_statement(&mut self, stmt: &Stmt)  -> Result<(), ControlFlow> {
         if let Stmt::While { condition, body } = stmt {
             while {
                 let while_condition = self.evaluate(condition)?;
                 self.truthy(&while_condition)
             } {
-                self.execute(body)?;
+                match self.execute(body) {
+                    Ok(_) => {}
+                    Err(ControlFlow::Break) => {
+                        return Ok(())
+                    }
+                    Err(error) => return Err(error)
+                }
             }
             return Ok(());
         }
@@ -162,7 +178,7 @@ impl<'lox> Interpreter<'lox> {
         unreachable!()
     }
 
-    fn evaluate_logical_expression(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
+    fn evaluate_logical_expression(&mut self, expr: &Expr) -> Result<Value, ControlFlow> {
         if let Expr::Logical {
             left,
             operator,
@@ -185,7 +201,7 @@ impl<'lox> Interpreter<'lox> {
         unreachable!();
     }
 
-    fn evaluate_if_statement(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+    fn evaluate_if_statement(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {
         if let Stmt::If {
             condition,
             then_branch,
@@ -208,7 +224,7 @@ impl<'lox> Interpreter<'lox> {
         &mut self,
         statements: &[Stmt],
         environment: EnvRef,
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<(), ControlFlow> {
         let previous = Rc::clone(&self.environment);
         self.environment = environment;
 
@@ -229,7 +245,7 @@ impl<'lox> Interpreter<'lox> {
         &mut self,
         name: &Token,
         initializer: &Option<Expr>,
-    ) -> Result<(), RuntimeError> {
+    ) -> Result<(), ControlFlow> {
         let value = match initializer {
             Some(expr) => Some(self.evaluate(expr)?),
             None => None,
@@ -239,7 +255,7 @@ impl<'lox> Interpreter<'lox> {
         Ok(())
     }
 
-    fn evaluate_assign_expression(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
+    fn evaluate_assign_expression(&mut self, expr: &Expr) -> Result<Value, ControlFlow> {
         if let Expr::Assignment { name, value } = expr {
             let value = Some(self.evaluate(value)?);
             self.environment.borrow_mut().assign(name, value)
@@ -248,7 +264,7 @@ impl<'lox> Interpreter<'lox> {
         }
     }
 
-    fn evaluate_expression_statement(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+    fn evaluate_expression_statement(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {
         match stmt {
             Stmt::ExprStmt(expr) => {
                 self.evaluate(expr)?;
@@ -258,7 +274,7 @@ impl<'lox> Interpreter<'lox> {
         }
     }
 
-    fn evaluate_print_statement(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+    fn evaluate_print_statement(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {
         match stmt {
             Stmt::Print(expr) => {
                 let value = self.evaluate(expr)?;
@@ -269,7 +285,7 @@ impl<'lox> Interpreter<'lox> {
         }
     }
 
-    fn evaluate(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
+    fn evaluate(&mut self, expr: &Expr) -> Result<Value, ControlFlow> {
         match expr {
             Expr::Literal(literal) => Ok(Value::from(literal.clone())),
             Expr::Grouping(expr) => self.evaluate(expr),
@@ -281,14 +297,14 @@ impl<'lox> Interpreter<'lox> {
                         if let Value::Number(number) = right_val {
                             Ok(Value::Number(-number))
                         } else {
-                            Err(RuntimeError {
+                            Err(ControlFlow::RuntimeError(RuntimeError {
                                 line: operator.line,
                                 error_type: ValidationError::InvalidOperandTypes {
                                     expected: &[ValueType::Number],
                                     actual_left: None,
                                     actual_right: right_val,
                                 },
-                            })
+                            }))
                         }
                     }
                     TokenKind::Bang => Ok(Value::Boolean(!self.truthy(&right_val))),
@@ -322,14 +338,14 @@ impl<'lox> Interpreter<'lox> {
                         (left, Value::String(right)) => {
                             Ok(Value::String(format!("{}{}", left, right)))
                         }
-                        (left, right) => Err(RuntimeError {
+                        (left, right) => Err(ControlFlow::RuntimeError(RuntimeError {
                             line: operator.line,
                             error_type: ValidationError::InvalidOperandTypes {
                                 expected: &[ValueType::Number, ValueType::String],
                                 actual_left: Some(left),
                                 actual_right: right,
                             },
-                        }),
+                        })),
                     },
                     TokenKind::Star => {
                         self.check_number_operands(operator, &left, &right, |l, r| {
@@ -341,20 +357,20 @@ impl<'lox> Interpreter<'lox> {
                             if right != 0_f64 {
                                 Ok(Value::Number(left / right))
                             } else {
-                                Err(RuntimeError {
+                                Err(ControlFlow::RuntimeError(RuntimeError {
                                     line: operator.line,
                                     error_type: ValidationError::DivisionByZero,
-                                })
+                                }))
                             }
                         }
-                        (left, right) => Err(RuntimeError {
+                        (left, right) => Err(ControlFlow::RuntimeError(RuntimeError {
                             line: operator.line,
                             error_type: ValidationError::InvalidOperandTypes {
                                 expected: &[ValueType::Number],
                                 actual_left: Some(left),
                                 actual_right: right,
                             },
-                        }),
+                        })),
                     },
                     TokenKind::Greater => {
                         self.check_number_operands(operator, &left, &right, |l, r| {
@@ -414,21 +430,21 @@ impl<'lox> Interpreter<'lox> {
         left: &Value,
         right: &Value,
         operation: T,
-    ) -> Result<Value, RuntimeError>
+    ) -> Result<Value, ControlFlow>
     where
         T: FnOnce(f64, f64) -> Value,
     {
         if let (Value::Number(left), Value::Number(right)) = (left, right) {
             Ok(operation(*left, *right))
         } else {
-            Err(RuntimeError {
+            Err(ControlFlow::RuntimeError(RuntimeError {
                 line: operator.line,
                 error_type: ValidationError::InvalidOperandTypes {
                     expected: &[ValueType::Number],
                     actual_left: Some(left.clone()),
                     actual_right: right.clone(),
                 },
-            })
+            }))
         }
     }
 }

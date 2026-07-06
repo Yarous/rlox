@@ -19,5 +19,5 @@ pub(crate) enum Stmt {
         condition: Expr,
         body: Box<Stmt>,
     },
-    // Break,
+    Break,
 }
