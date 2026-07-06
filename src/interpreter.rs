@@ -154,11 +154,11 @@ impl<'lox> Interpreter<'lox> {
             }
             Stmt::If { .. } => self.evaluate_if_statement(stmt),
             Stmt::While { .. } => self.evaluate_while_statement(stmt),
-            Stmt::Break => Err(ControlFlow::Break)
+            Stmt::Break => Err(ControlFlow::Break),
         }
     }
 
-    fn evaluate_while_statement(&mut self, stmt: &Stmt)  -> Result<(), ControlFlow> {
+    fn evaluate_while_statement(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {
         if let Stmt::While { condition, body } = stmt {
             while {
                 let while_condition = self.evaluate(condition)?;
@@ -166,10 +166,8 @@ impl<'lox> Interpreter<'lox> {
             } {
                 match self.execute(body) {
                     Ok(_) => {}
-                    Err(ControlFlow::Break) => {
-                        return Ok(())
-                    }
-                    Err(error) => return Err(error)
+                    Err(ControlFlow::Break) => return Ok(()),
+                    Err(error) => return Err(error),
                 }
             }
             return Ok(());
