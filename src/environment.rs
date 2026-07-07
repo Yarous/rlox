@@ -27,8 +27,8 @@ impl Environment {
         }))
     }
 
-    pub(crate) fn define(&mut self, name: &Token, value: Option<Value>) {
-        self.values.insert(name.lexeme.clone(), value);
+    pub(crate) fn define(&mut self, name: String, value: Option<Value>) {
+        self.values.insert(name, value);
     }
 
     pub(crate) fn get(&self, name: &Token) -> Result<Value, ControlFlow> {

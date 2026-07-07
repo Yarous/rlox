@@ -3,6 +3,7 @@ use crate::environment::{EnvRef, Environment};
 use crate::expr::{Expr, Op};
 use crate::stmt::Stmt;
 use crate::token::{Literal, Token, TokenKind};
+use std::fmt;
 use std::fmt::Display;
 use std::rc::Rc;
 
@@ -16,10 +17,12 @@ pub(crate) enum ValidationError {
     },
     UndefinedVariable(String),
     UninitializedVariable(String),
+    NonCallable(String),
+    NotMatchedArity(String),
 }
 
 impl Display for ValidationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let begin = "Validation Error: ";
         match self {
             ValidationError::DivisionByZero => write!(f, "{}Division by Zero", begin),
@@ -53,6 +56,16 @@ impl Display for ValidationError {
             ValidationError::UninitializedVariable(where_uninit) => {
                 write!(f, "{} Uninitialized variable: {}", begin, where_uninit)
             }
+            ValidationError::NonCallable(non_callable_reason) => {
+                write!(
+                    f,
+                    "{} Non-callable expression: {}",
+                    begin, non_callable_reason
+                )
+            }
+            ValidationError::NotMatchedArity(st) => {
+                write!(f, "{} {}", begin, st)
+            }
         }
     }
 }
@@ -66,14 +79,16 @@ pub(crate) struct RuntimeError {
 pub(crate) enum ControlFlow {
     RuntimeError(RuntimeError),
     Break,
+    Return(Value),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub(crate) enum Value {
     Number(f64),
     String(String),
     Boolean(bool),
     Nil,
+    Callable(Rc<dyn LoxCallable>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -85,18 +100,43 @@ pub(crate) enum ValueType {
 }
 
 impl Display for Value {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Number(n) => write!(f, "{}", n),
             Value::String(s) => write!(f, "{}", s),
             Value::Boolean(b) => write!(f, "{}", b),
             Value::Nil => write!(f, "nil"),
+            Value::Callable(c) => write!(f, "{}", c),
         }
     }
 }
 
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Nil, Value::Nil) => true,
+            (Value::Boolean(a), Value::Boolean(b)) => a == b,
+            (Value::Number(a), Value::Number(b)) => a == b,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Callable(a), Value::Callable(b)) => Rc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
+}
+
+impl fmt::Debug for dyn LoxCallable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<fn {}>", self.name())
+    }
+}
+
+impl Display for dyn LoxCallable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<fn {}>", self.name())
+    }
+}
 impl Display for ValueType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ValueType::Number => write!(f, "Number"),
             ValueType::String => write!(f, "String"),
@@ -117,16 +157,124 @@ impl From<Literal> for Value {
     }
 }
 
+pub(crate) trait LoxCallable {
+    fn arity(&self) -> usize;
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: &[Value],
+    ) -> Result<Value, ControlFlow>;
+    fn name(&self) -> String;
+}
+
+struct Clock;
+impl LoxCallable for Clock {
+    fn arity(&self) -> usize {
+        0
+    }
+    fn call(
+        &self,
+        _interpreter: &mut Interpreter,
+        _arguments: &[Value],
+    ) -> Result<Value, ControlFlow> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        Ok(Value::Number(now))
+    }
+    fn name(&self) -> String {
+        "Clock".to_string()
+    }
+}
+
+struct LoxFunction {
+    declaration: Stmt,
+}
+
+impl LoxFunction {
+    fn new(declaration: Stmt) -> Self {
+        match declaration {
+            Stmt::Function { .. } => Self { declaration },
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl LoxCallable for LoxFunction {
+    fn arity(&self) -> usize {
+        match &self.declaration {
+            Stmt::Function {
+                name: _,
+                parameters,
+                body: _,
+            } => parameters.len(),
+            _ => unreachable!(),
+        }
+    }
+
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: &[Value],
+    ) -> Result<Value, ControlFlow> {
+        match &self.declaration {
+            Stmt::Function {
+                name: _name,
+                parameters,
+                body,
+            } => {
+                let environment = Environment::add_enclosing(interpreter.globals.clone());
+
+                for i in 0..parameters.len() {
+                    environment.borrow_mut().define(
+                        parameters.get(i).unwrap().lexeme.clone(),
+                        arguments.get(i).cloned(),
+                    );
+                }
+
+                match interpreter.evaluate_block_statement(body, environment) {
+                    Ok(_) => (),
+                    Err(ControlFlow::Return(value)) => return Ok(value),
+                    Err(e) => return Err(e),
+                }
+                Ok(Value::Nil)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn name(&self) -> String {
+        match &self.declaration {
+            Stmt::Function {
+                name,
+                parameters: _,
+                body: _,
+            } => name.lexeme.clone(),
+            _ => unreachable!(),
+        }
+    }
+}
+
 pub(crate) struct Interpreter<'lox> {
     lox: &'lox mut Lox,
     environment: EnvRef,
+    globals: EnvRef,
 }
 
 impl<'lox> Interpreter<'lox> {
     pub(crate) fn new(lox: &'lox mut Lox) -> Self {
+        let globals = Environment::new();
+        let environment = globals.clone();
+
+        globals
+            .borrow_mut()
+            .define("clock".to_string(), Some(Value::Callable(Rc::new(Clock))));
+
         Self {
             lox,
-            environment: Environment::new(),
+            globals,
+            environment,
         }
     }
 
@@ -155,7 +303,81 @@ impl<'lox> Interpreter<'lox> {
             Stmt::If { .. } => self.evaluate_if_statement(stmt),
             Stmt::While { .. } => self.evaluate_while_statement(stmt),
             Stmt::Break => Err(ControlFlow::Break),
+            Stmt::Function { .. } => self.evaluate_function_statement(stmt),
+            Stmt::Return { .. } => self.evaluate_return_statement(stmt),
         }
+    }
+
+    fn evaluate_return_statement(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {
+        if let Stmt::Return {
+            keyword: _keyword,
+            value,
+        } = stmt
+        {
+            let value_l: Value;
+            if let Some(value) = value {
+                value_l = self.evaluate(value)?;
+            } else {
+                value_l = Value::Nil;
+            }
+
+            return Err(ControlFlow::Return(value_l));
+        }
+        unreachable!()
+    }
+
+    fn evaluate_call_expression(&mut self, expr: &Expr) -> Result<Value, ControlFlow> {
+        if let Expr::Call {
+            callee,
+            paren,
+            arguments,
+        } = expr
+        {
+            let callee = self.evaluate(callee)?;
+            let mut arguments_list: Vec<Value> = Vec::new();
+            for arg in arguments {
+                arguments_list.push(self.evaluate(arg)?);
+            }
+
+            let function = match callee {
+                Value::Callable(f) => f,
+                _ => {
+                    return Err(ControlFlow::RuntimeError(RuntimeError {
+                        line: paren.line,
+                        error_type: ValidationError::NonCallable(
+                            "Can only call functions and classes".into(),
+                        ),
+                    }));
+                }
+            };
+            if arguments_list.len() != function.arity() {
+                return Err(ControlFlow::RuntimeError(RuntimeError {
+                    line: paren.line,
+                    error_type: ValidationError::NotMatchedArity(format!(
+                        "Expected {} arguments but got {}.",
+                        function.arity(),
+                        arguments_list.len()
+                    )),
+                }));
+            }
+
+            return function.call(self, &arguments_list);
+        }
+        unreachable!()
+    }
+
+    fn evaluate_function_statement(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {
+        if let Stmt::Function { name, .. } = stmt {
+            let function = LoxFunction::new(stmt.clone());
+            self.environment.borrow_mut().define(
+                name.lexeme.clone(),
+                Some(Value::Callable(Rc::new(function))),
+            );
+
+            return Ok(());
+        }
+
+        unreachable!()
     }
 
     fn evaluate_while_statement(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {
@@ -249,7 +471,9 @@ impl<'lox> Interpreter<'lox> {
             None => None,
         };
 
-        self.environment.borrow_mut().define(name, value);
+        self.environment
+            .borrow_mut()
+            .define(name.lexeme.clone(), value);
         Ok(())
     }
 
@@ -316,7 +540,6 @@ impl<'lox> Interpreter<'lox> {
             } => {
                 let left = self.evaluate(left)?;
                 let right = self.evaluate(right)?;
-
                 match operator.token_type {
                     TokenKind::Minus => {
                         self.check_number_operands(operator, &left, &right, |l, r| {
@@ -411,6 +634,7 @@ impl<'lox> Interpreter<'lox> {
             }
             Expr::Variable(name) => self.environment.borrow().get(name),
             Expr::Assignment { .. } => self.evaluate_assign_expression(expr),
+            Expr::Call { .. } => self.evaluate_call_expression(expr),
         }
     }
 

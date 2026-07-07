@@ -20,4 +20,13 @@ pub(crate) enum Stmt {
         body: Box<Stmt>,
     },
     Break,
+    Function {
+        name: Token,
+        parameters: Vec<Token>,
+        body: Vec<Stmt>,
+    },
+    Return {
+        keyword: Token,
+        value: Option<Expr>,
+    },
 }

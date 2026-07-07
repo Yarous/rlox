@@ -43,6 +43,11 @@ pub(crate) enum Expr {
         name: Token,
         value: Box<Expr>,
     },
+    Call {
+        callee: Box<Expr>,
+        paren: Token,
+        arguments: Vec<Expr>,
+    },
 }
 
 impl std::fmt::Display for Expr {
@@ -68,6 +73,21 @@ impl std::fmt::Display for Expr {
             Expr::Grouping(expr) => write!(f, "({})", expr),
             Expr::Variable(var) => write!(f, "{}", var),
             Expr::Assignment { name, value } => write!(f, "{} = {}", name, value),
+            Expr::Call {
+                callee,
+                paren,
+                arguments,
+            } => write!(
+                f,
+                "({} {} {})",
+                callee,
+                paren,
+                arguments
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
         }
     }
 }
