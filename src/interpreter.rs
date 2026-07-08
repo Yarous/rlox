@@ -318,14 +318,14 @@ impl<'lox> Interpreter<'lox> {
             value,
         } = stmt
         {
-            let value_l: Value;
+            let returning_value: Value;
             if let Some(value) = value {
-                value_l = self.evaluate(value)?;
+                returning_value = self.evaluate(value)?;
             } else {
-                value_l = Value::Nil;
+                returning_value = Value::Nil;
             }
 
-            return Err(ControlFlow::Return(value_l));
+            return Err(ControlFlow::Return(returning_value));
         }
         unreachable!()
     }
