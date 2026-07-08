@@ -4,3 +4,4 @@
 .agents
 test.lox
 review.md
+Cargo.lock

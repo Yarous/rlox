@@ -190,12 +190,16 @@ impl LoxCallable for Clock {
 
 struct LoxFunction {
     declaration: Stmt,
+    closure: EnvRef,
 }
 
 impl LoxFunction {
-    fn new(declaration: Stmt) -> Self {
+    fn new(declaration: Stmt, closure: EnvRef) -> Self {
         match declaration {
-            Stmt::Function { .. } => Self { declaration },
+            Stmt::Function { .. } => Self {
+                declaration,
+                closure,
+            },
             _ => unreachable!(),
         }
     }
@@ -224,7 +228,7 @@ impl LoxCallable for LoxFunction {
                 parameters,
                 body,
             } => {
-                let environment = Environment::add_enclosing(interpreter.globals.clone());
+                let environment = Environment::add_enclosing(self.closure.clone());
 
                 for i in 0..parameters.len() {
                     environment.borrow_mut().define(
@@ -368,7 +372,7 @@ impl<'lox> Interpreter<'lox> {
 
     fn evaluate_function_statement(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {
         if let Stmt::Function { name, .. } = stmt {
-            let function = LoxFunction::new(stmt.clone());
+            let function = LoxFunction::new(stmt.clone(), self.environment.clone());
             self.environment.borrow_mut().define(
                 name.lexeme.clone(),
                 Some(Value::Callable(Rc::new(function))),
