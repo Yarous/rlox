@@ -7,12 +7,14 @@ pub(crate) struct ParseError<'token> {
     pub(crate) message: &'static str,
 }
 
+#[derive(Debug)]
 pub(crate) struct ParseResult<'token> {
     pub(crate) statements: Option<Vec<Stmt>>,
     pub(crate) errors: Vec<ParseError<'token>>,
 }
 
 impl<'token> ParseError<'token> {
+    #[must_use]
     pub(super) fn new(token: &'token Token, error_message: &'static str) -> Self {
         Self {
             token,

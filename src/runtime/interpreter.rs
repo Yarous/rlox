@@ -28,10 +28,10 @@ impl<'lox> Interpreter<'lox> {
     pub(crate) fn interpret(&mut self, statements: &[Stmt]) {
         for stmt in statements {
             match self.execute(stmt) {
-                Ok(_) => (),
+                Ok(()) => (),
                 Err(error) => {
                     if let ControlFlow::RuntimeError(reported_error) = error {
-                        self.lox.runtime_error(reported_error)
+                        self.lox.runtime_error(&reported_error);
                     }
                 }
             }
@@ -143,7 +143,7 @@ impl<'lox> Interpreter<'lox> {
                 self.truthy(&while_condition)
             } {
                 match self.execute(body) {
-                    Ok(_) => {}
+                    Ok(()) => {}
                     Err(ControlFlow::Break) => return Ok(()),
                     Err(error) => return Err(error),
                 }
@@ -211,7 +211,7 @@ impl<'lox> Interpreter<'lox> {
                     self.environment = previous;
                     return Err(err);
                 }
-            };
+            }
         }
         self.environment = previous;
         Ok(())
@@ -256,7 +256,7 @@ impl<'lox> Interpreter<'lox> {
         match stmt {
             Stmt::Print(expr) => {
                 let value = self.evaluate(expr)?;
-                println!("{}", value);
+                println!("{value}");
                 Ok(())
             }
             _ => unreachable!(),
@@ -307,14 +307,10 @@ impl<'lox> Interpreter<'lox> {
                             Ok(Value::Number(left + right))
                         }
                         (Value::String(left), Value::String(right)) => {
-                            Ok(Value::String(format!("{}{}", left, right)))
+                            Ok(Value::String(format!("{left}{right}")))
                         }
-                        (Value::String(left), right) => {
-                            Ok(Value::String(format!("{}{}", left, right)))
-                        }
-                        (left, Value::String(right)) => {
-                            Ok(Value::String(format!("{}{}", left, right)))
-                        }
+                        (Value::String(left), right) => Ok(Value::String(format!("{left}{right}"))),
+                        (left, Value::String(right)) => Ok(Value::String(format!("{left}{right}"))),
                         (left, right) => Err(ControlFlow::RuntimeError(RuntimeError {
                             line: operator.line,
                             error_type: ValidationError::InvalidOperandTypes {

@@ -23,7 +23,7 @@ impl<'tokens> Parser<'tokens> {
                 parameters.push(
                     self.consume(TokenKind::Identifier, "Expected parameter name")?
                         .clone(),
-                )
+                );
             }
         }
         self.consume(TokenKind::RightParen, "Expect ')' after parameters.")?;

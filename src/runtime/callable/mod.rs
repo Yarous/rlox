@@ -24,12 +24,14 @@ pub(crate) trait LoxCallable {
 
 impl fmt::Debug for dyn LoxCallable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<fn {}>", self.name())
+        let name = self.name();
+        write!(f, "<fn {name}>")
     }
 }
 
 impl Display for dyn LoxCallable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<fn {}>", self.name())
+        let name = self.name();
+        write!(f, "<fn {name}>")
     }
 }

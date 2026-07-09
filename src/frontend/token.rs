@@ -71,6 +71,7 @@ pub(crate) struct Token {
 }
 
 impl Token {
+    #[must_use]
     pub(crate) fn new(
         token_type: TokenKind,
         lexeme: String,
@@ -88,9 +89,13 @@ impl Token {
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(literal) = &self.literal {
-            write!(f, "{} {} {}", self.token_type, self.lexeme, literal)
+            let token_type = self.token_type;
+            let lexeme = &self.lexeme;
+            write!(f, "{token_type} {lexeme} {literal}")
         } else {
-            write!(f, "{} {}", self.token_type, self.lexeme)
+            let token_type = self.token_type;
+            let lexeme = &self.lexeme;
+            write!(f, "{token_type} {lexeme}")
         }
     }
 }

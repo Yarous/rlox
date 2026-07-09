@@ -14,6 +14,7 @@ pub(crate) struct Scanner<'src> {
 }
 
 impl<'src> Scanner<'src> {
+    #[must_use]
     pub(crate) fn new(source: &'src str) -> Self {
         Self {
             source,
@@ -283,12 +284,13 @@ impl<'src> Scanner<'src> {
         }
     }
 
+    #[must_use]
     pub fn scan_tokens(&mut self) -> ScanResult {
         let mut errors: Vec<ScanError> = Vec::new();
         while !self.is_at_end() {
             self.start = self.current;
             match self.scan_token() {
-                Ok(_) => (),
+                Ok(()) => (),
                 Err(error) => errors.push(error),
             }
         }

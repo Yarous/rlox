@@ -43,11 +43,11 @@ fn run_prompt(input: &str) -> std::process::Output {
 }
 
 fn stdout(output: &std::process::Output) -> String {
-    String::from_utf8_lossy(&output.stdout).to_string()
+    String::from_utf8_lossy(&output.stdout).into_owned()
 }
 
 fn stderr(output: &std::process::Output) -> String {
-    String::from_utf8_lossy(&output.stderr).to_string()
+    String::from_utf8_lossy(&output.stderr).into_owned()
 }
 
 #[test]

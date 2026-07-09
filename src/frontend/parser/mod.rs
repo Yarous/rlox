@@ -18,6 +18,7 @@ pub(crate) struct Parser<'tokens> {
 }
 
 impl<'tokens> Parser<'tokens> {
+    #[must_use]
     pub(crate) fn new(tokens: &'tokens [Token]) -> Self {
         Self {
             tokens,
@@ -28,6 +29,7 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
+    #[must_use]
     pub(crate) fn parse(&mut self) -> ParseResult<'tokens> {
         let mut statements: Vec<Stmt> = Vec::new();
         while !self.is_at_end() {

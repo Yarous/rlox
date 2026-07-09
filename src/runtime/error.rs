@@ -20,7 +20,7 @@ impl Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let begin = "Validation Error: ";
         match self {
-            ValidationError::DivisionByZero => write!(f, "{}Division by Zero", begin),
+            ValidationError::DivisionByZero => write!(f, "{begin}Division by Zero"),
             ValidationError::InvalidOperandTypes {
                 expected,
                 actual_left,
@@ -34,32 +34,26 @@ impl Display for ValidationError {
                 if let Some(actual_left) = actual_left {
                     write!(
                         f,
-                        "{} Invalid operand types. Expected: [{}], but got: [{}] and [{}]",
-                        begin, expected_str, actual_left, actual_right
+                        "{begin} Invalid operand types. Expected: [{expected_str}], but got: [{actual_left}] and [{actual_right}]"
                     )
                 } else {
                     write!(
                         f,
-                        "{} Invalid operand types. Expected: [{}], but got: [{}]",
-                        begin, expected_str, actual_right
+                        "{begin} Invalid operand types. Expected: [{expected_str}], but got: [{actual_right}]"
                     )
                 }
             }
             ValidationError::UndefinedVariable(where_undef) => {
-                write!(f, "{} Undefined variable: {}", begin, where_undef)
+                write!(f, "{begin} Undefined variable: {where_undef}")
             }
             ValidationError::UninitializedVariable(where_uninit) => {
-                write!(f, "{} Uninitialized variable: {}", begin, where_uninit)
+                write!(f, "{begin} Uninitialized variable: {where_uninit}")
             }
             ValidationError::NonCallable(non_callable_reason) => {
-                write!(
-                    f,
-                    "{} Non-callable expression: {}",
-                    begin, non_callable_reason
-                )
+                write!(f, "{begin} Non-callable expression: {non_callable_reason}")
             }
             ValidationError::NotMatchedArity(st) => {
-                write!(f, "{} {}", begin, st)
+                write!(f, "{begin} {st}")
             }
         }
     }
