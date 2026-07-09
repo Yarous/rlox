@@ -4,4 +4,5 @@
 .agents
 test.lox
 review.md
+data_struct.md
 Cargo.lock

@@ -14,7 +14,7 @@ fn parse(source: &str) -> Vec<Stmt> {
 }
 
 fn interpreter() -> Interpreter<'static> {
-    let lox = Box::leak(Box::new(crate::app::lox::Lox::new()));
+    let lox = Box::leak(Box::new(Lox::new()));
     Interpreter::new(lox)
 }
 
