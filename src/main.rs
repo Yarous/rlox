@@ -57,7 +57,13 @@ impl Lox {
     fn run_prompt(&mut self) {
         loop {
             print!("> ");
-            std::io::stdout().flush().unwrap();
+            match std::io::stdout().flush() {
+                Ok(_) => (),
+                Err(error) => {
+                    eprintln!("Failed to flush stdout: {}", error);
+                    std::process::exit(1);
+                }
+            };
             let mut line = String::new();
             std::io::stdin().read_line(&mut line).unwrap();
             if line == "\n" || line == "exit\n" {
