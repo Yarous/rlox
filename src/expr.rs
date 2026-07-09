@@ -1,3 +1,4 @@
+use crate::stmt::Stmt;
 use crate::token::{Literal, Token, TokenKind};
 
 #[derive(Debug, Clone, Copy)]
@@ -48,6 +49,10 @@ pub(crate) enum Expr {
         paren: Token,
         arguments: Vec<Expr>,
     },
+    Lambda {
+        parameters: Vec<Token>,
+        body: Vec<Stmt>,
+    },
 }
 
 impl std::fmt::Display for Expr {
@@ -84,6 +89,19 @@ impl std::fmt::Display for Expr {
                 paren,
                 arguments
                     .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
+            Expr::Lambda { parameters, body } => write!(
+                f,
+                "({} {})",
+                parameters
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" "),
+                body.iter()
                     .map(|v| v.to_string())
                     .collect::<Vec<String>>()
                     .join(" ")

@@ -260,10 +260,66 @@ impl LoxCallable for LoxFunction {
     }
 }
 
+struct LoxLambda {
+    declaration: Expr,
+    closure: EnvRef,
+}
+
+impl LoxLambda {
+    fn new(declaration: Expr, closure: EnvRef) -> Self {
+        Self {
+            declaration,
+            closure,
+        }
+    }
+}
+
+impl LoxCallable for LoxLambda {
+    fn arity(&self) -> usize {
+        if let Expr::Lambda {
+            parameters,
+            body: _body,
+        } = &self.declaration
+        {
+            return parameters.len();
+        }
+        unreachable!()
+    }
+
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: &[Value],
+    ) -> Result<Value, ControlFlow> {
+        match &self.declaration {
+            Expr::Lambda { parameters, body } => {
+                let environment = Environment::add_enclosing(self.closure.clone());
+
+                for i in 0..parameters.len() {
+                    environment.borrow_mut().define(
+                        parameters.get(i).unwrap().lexeme.clone(),
+                        arguments.get(i).cloned(),
+                    );
+                }
+
+                match interpreter.evaluate_block_statement(body, environment) {
+                    Ok(_) => (),
+                    Err(ControlFlow::Return(value)) => return Ok(value),
+                    Err(e) => return Err(e),
+                }
+                Ok(Value::Nil)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn name(&self) -> String {
+        "Lambda".to_string()
+    }
+}
 pub(crate) struct Interpreter<'lox> {
     lox: &'lox mut Lox,
     environment: EnvRef,
-    globals: EnvRef,
 }
 
 impl<'lox> Interpreter<'lox> {
@@ -275,11 +331,7 @@ impl<'lox> Interpreter<'lox> {
             .borrow_mut()
             .define("clock".to_string(), Some(Value::Callable(Rc::new(Clock))));
 
-        Self {
-            lox,
-            globals,
-            environment,
-        }
+        Self { lox, environment }
     }
 
     pub(crate) fn interpret(&mut self, statements: &[Stmt]) {
@@ -310,6 +362,15 @@ impl<'lox> Interpreter<'lox> {
             Stmt::Function { .. } => self.evaluate_function_statement(stmt),
             Stmt::Return { .. } => self.evaluate_return_statement(stmt),
         }
+    }
+
+    fn evaluate_lambda_expression(&mut self, expr: &Expr) -> Result<Value, ControlFlow> {
+        if let Expr::Lambda { .. } = expr {
+            let lambda = LoxLambda::new(expr.clone(), self.environment.clone());
+
+            return Ok(Value::Callable(Rc::new(lambda)));
+        }
+        unreachable!()
     }
 
     fn evaluate_return_statement(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {
@@ -639,6 +700,7 @@ impl<'lox> Interpreter<'lox> {
             Expr::Variable(name) => self.environment.borrow().get(name),
             Expr::Assignment { .. } => self.evaluate_assign_expression(expr),
             Expr::Call { .. } => self.evaluate_call_expression(expr),
+            Expr::Lambda { .. } => self.evaluate_lambda_expression(expr),
         }
     }
 

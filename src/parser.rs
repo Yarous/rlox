@@ -134,6 +134,34 @@ impl<'tokens> Parser<'tokens> {
         }
     }
 
+    fn parse_function_parameters(&mut self) -> Result<Vec<Token>, ParseError<'tokens>> {
+        self.consume(TokenKind::LeftParen, "Expect '(' before parameters")?;
+        let mut parameters: Vec<Token> = Vec::new();
+        if !self.check(TokenKind::RightParen) {
+            if parameters.len() >= 255 {
+                self.error("Cant have more than 255 parameters.");
+            }
+
+            parameters.push(
+                self.consume(TokenKind::Identifier, "Expected parameter name")?
+                    .clone(),
+            );
+            while self.switch(&[TokenKind::Comma]) {
+                if parameters.len() >= 255 {
+                    self.error("Cant have more than 255 parameters.");
+                }
+
+                parameters.push(
+                    self.consume(TokenKind::Identifier, "Expected parameter name")?
+                        .clone(),
+                )
+            }
+        }
+        self.consume(TokenKind::RightParen, "Expect ')' after parameters.")?;
+
+        Ok(parameters)
+    }
+
     // grammar-rules
 
     fn declaration(&mut self) -> Option<Stmt> {
@@ -219,30 +247,9 @@ impl<'tokens> Parser<'tokens> {
         let name = self
             .consume(TokenKind::Identifier, "Expect function name!")?
             .clone();
-        self.consume(TokenKind::LeftParen, "Expect '(' after function name!")?;
 
-        let mut parameters: Vec<Token> = Vec::new();
-        if !self.check(TokenKind::RightParen) {
-            if parameters.len() >= 255 {
-                self.error("Cant have more than 255 parameters.");
-            }
+        let parameters = self.parse_function_parameters()?;
 
-            parameters.push(
-                self.consume(TokenKind::Identifier, "Expected parameter name")?
-                    .clone(),
-            );
-            while self.switch(&[TokenKind::Comma]) {
-                if parameters.len() >= 255 {
-                    self.error("Cant have more than 255 parameters.");
-                }
-
-                parameters.push(
-                    self.consume(TokenKind::Identifier, "Expected parameter name")?
-                        .clone(),
-                )
-            }
-        }
-        self.consume(TokenKind::RightParen, "Expect ')' after parameters.")?;
         self.consume(TokenKind::LeftBrace, "Expect '{' before function body.")?;
         let body = self.block()?;
         Ok(Stmt::Function {
@@ -612,6 +619,15 @@ impl<'tokens> Parser<'tokens> {
 
             self.consume(TokenKind::RightParen, "Expect ')' after expression")?;
             return Ok(Expr::Grouping(Box::new(expr)));
+        }
+
+        if self.switch(&[TokenKind::Fun]) {
+            let parameters = self.parse_function_parameters()?;
+
+            self.consume(TokenKind::LeftBrace, "Expect '{' before function body.")?;
+            let body = self.block()?;
+
+            return Ok(Expr::Lambda { parameters, body });
         }
 
         if self.switch(&[TokenKind::Identifier]) {
