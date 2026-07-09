@@ -1,5 +1,7 @@
-use crate::interpreter::{ControlFlow, RuntimeError, ValidationError, Value};
-use crate::token::Token;
+use crate::frontend::token::Token;
+use crate::runtime::control_flow::ControlFlow;
+use crate::runtime::error::{RuntimeError, ValidationError};
+use crate::runtime::value::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;

@@ -1,41 +1,66 @@
-use crate::expr::Expr;
-use crate::token::Token;
+use crate::ast::{Expr, Stmt};
+use std::fmt;
 use std::fmt::Display;
 
-#[derive(Debug, Clone)]
-pub(crate) enum Stmt {
-    ExprStmt(Expr),
-    Print(Expr),
-    Var {
-        name: Token,
-        initializer: Option<Expr>,
-    },
-    Block(Vec<Stmt>),
-    If {
-        condition: Expr,
-        then_branch: Box<Stmt>,
-        else_branch: Option<Box<Stmt>>,
-    },
-    While {
-        condition: Expr,
-        body: Box<Stmt>,
-    },
-    Break,
-    Function {
-        name: Token,
-        parameters: Vec<Token>,
-        body: Vec<Stmt>,
-    },
-    Return {
-        keyword: Token,
-        value: Option<Expr>,
-    },
+impl Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Expr::Binary {
+                left,
+                operator,
+                right,
+            } => write!(f, "({} {} {})", left, operator.token_type, right),
+            Expr::Ternary {
+                condition,
+                then_expr,
+                else_expr,
+            } => write!(f, "({} ? {} : {})", condition, then_expr, else_expr),
+            Expr::Unary { operator, right } => write!(f, "({} {})", operator.token_type, right),
+            Expr::Logical {
+                left,
+                operator,
+                right,
+            } => write!(f, "({} {} {})", left, operator.token_type, right),
+            Expr::Literal(literal) => write!(f, "{}", literal),
+            Expr::Grouping(expr) => write!(f, "({})", expr),
+            Expr::Variable(var) => write!(f, "{}", var),
+            Expr::Assignment { name, value } => write!(f, "{} = {}", name, value),
+            Expr::Call {
+                callee,
+                paren,
+                arguments,
+            } => write!(
+                f,
+                "({} {} {})",
+                callee,
+                paren,
+                arguments
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
+            Expr::Lambda { parameters, body } => write!(
+                f,
+                "({} {})",
+                parameters
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" "),
+                body.iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
+        }
+    }
 }
 
 impl Display for Stmt {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Stmt::ExprStmt(expr) => write!(f, "({})", expr),
+            Stmt::Expression(expr) => write!(f, "({})", expr),
             Stmt::Print(expr) => write!(f, "print {}", expr),
             Stmt::Var { name, initializer } => {
                 if let Some(init) = initializer {
