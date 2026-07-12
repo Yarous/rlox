@@ -1,1 +1,1 @@
-Rlox - lox interpreter
+Rlox - lox interpreter writen in Rust
