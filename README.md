@@ -22,7 +22,7 @@ now it just walks the AST directly, so don't expect it to be fast.
 You need Rust installed (stable is fine). Then:
 
 ```
-git clone https://github.com/<your-username>/rlox.git
+git clone https://github.com/Yarous/rlox.git
 cd rlox
 cargo build --release
 ```
