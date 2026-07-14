@@ -13,6 +13,7 @@ interpreters work under the hood, rather than just reading about it.
 - Loops (`while`, `for`)
 - Ternary expressions (`cond ? a : b`)
 - Control flow: `if`/`else`, `break`, `return`
+- classes
 
 Still missing: classes, a standard library, and any kind of bytecode VM. Right
 now it just walks the AST directly, so don't expect it to be fast.
