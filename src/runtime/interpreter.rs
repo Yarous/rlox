@@ -1,4 +1,3 @@
-use crate::app::lox::Lox;
 use crate::ast::{Expr, Op, Stmt};
 use crate::frontend::token::{Token, TokenKind};
 use crate::runtime::callable::{Clock, LoxFunction, LoxLambda};
@@ -8,13 +7,12 @@ use crate::runtime::error::{RuntimeError, ValidationError};
 use crate::runtime::value::{Value, ValueType};
 use std::rc::Rc;
 
-pub(crate) struct Interpreter<'lox> {
-    lox: &'lox mut Lox,
+pub(crate) struct Interpreter {
     environment: EnvRef,
 }
 
-impl<'lox> Interpreter<'lox> {
-    pub(crate) fn new(lox: &'lox mut Lox) -> Self {
+impl Interpreter {
+    pub(crate) fn new() -> Self {
         let globals = Environment::new();
         let environment = globals.clone();
 
@@ -22,7 +20,7 @@ impl<'lox> Interpreter<'lox> {
             .borrow_mut()
             .define("clock".to_string(), Some(Value::Callable(Rc::new(Clock))));
 
-        Self { lox, environment }
+        Self { environment }
     }
 
     pub(crate) fn interpret(&mut self, statements: &[Stmt]) -> Result<(), ControlFlow> {
@@ -366,6 +364,7 @@ impl<'lox> Interpreter<'lox> {
                     }
                     TokenKind::EqualEqual => Ok(Value::Boolean(left == right)),
                     TokenKind::BangEqual => Ok(Value::Boolean(left != right)),
+                    TokenKind::Comma => Ok(right),
                     _ => unreachable!(),
                 }
             }

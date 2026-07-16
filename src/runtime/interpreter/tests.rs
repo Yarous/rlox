@@ -13,9 +13,8 @@ fn parse(source: &str) -> Vec<Stmt> {
     result.statements.unwrap()
 }
 
-fn interpreter() -> Interpreter<'static> {
-    let lox = Box::leak(Box::new(Lox::new()));
-    Interpreter::new(lox)
+fn interpreter() -> Interpreter {
+    Interpreter::new()
 }
 
 fn eval(source: &str) -> Result<Value, ControlFlow> {

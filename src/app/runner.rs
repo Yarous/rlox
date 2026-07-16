@@ -24,7 +24,7 @@ pub(crate) fn run_source(lox: &mut Lox, source: &str) {
         return;
     }
 
-    let mut interpreter = Interpreter::new(lox);
+    let mut interpreter = Interpreter::new();
     match interpreter.interpret(&parse_result.statements.unwrap()) {
         Ok(_) => (),
         Err(error) => {
