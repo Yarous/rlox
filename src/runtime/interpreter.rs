@@ -25,17 +25,16 @@ impl<'lox> Interpreter<'lox> {
         Self { lox, environment }
     }
 
-    pub(crate) fn interpret(&mut self, statements: &[Stmt]) {
+    pub(crate) fn interpret(&mut self, statements: &[Stmt]) -> Result<(), ControlFlow> {
         for stmt in statements {
             match self.execute(stmt) {
                 Ok(()) => (),
                 Err(error) => {
-                    if let ControlFlow::RuntimeError(reported_error) = error {
-                        self.lox.runtime_error(&reported_error);
-                    }
+                    return Err(error);
                 }
             }
         }
+        Ok(())
     }
 
     fn execute(&mut self, stmt: &Stmt) -> Result<(), ControlFlow> {

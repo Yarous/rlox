@@ -2,6 +2,7 @@ use crate::app::lox::Lox;
 use crate::frontend::parser::Parser;
 use crate::frontend::scanner::Scanner;
 use crate::runtime::Interpreter;
+use crate::runtime::control_flow::ControlFlow;
 
 pub(crate) fn run_source(lox: &mut Lox, source: &str) {
     let mut scanner = Scanner::new(source);
@@ -24,5 +25,15 @@ pub(crate) fn run_source(lox: &mut Lox, source: &str) {
     }
 
     let mut interpreter = Interpreter::new(lox);
-    interpreter.interpret(&parse_result.statements.unwrap());
+    match interpreter.interpret(&parse_result.statements.unwrap()) {
+        Ok(_) => (),
+        Err(error) => {
+            if let ControlFlow::RuntimeError(reported_error) = error {
+                lox.runtime_error(&reported_error);
+
+                return
+            }
+            unreachable!()
+        }
+    }
 }
