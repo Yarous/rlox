@@ -31,7 +31,7 @@ pub(crate) fn run_source(lox: &mut Lox, source: &str) {
             if let ControlFlow::RuntimeError(reported_error) = error {
                 lox.runtime_error(&reported_error);
 
-                return
+                return;
             }
             unreachable!()
         }
